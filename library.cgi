@@ -13,6 +13,9 @@ use CGI;
 use CGI::Carp qw(fatalsToBrowser);
 use Data::Dumper;
 
+use WWW::Scraper::ISBN;
+
+
 # When I say 'UPC', what I actually mean is a EAN-13...
 sub UPC_makecheckdigit($) {
 	my ($upc) = @_;
@@ -73,6 +76,30 @@ sub ISBN_makecheckdigit($) {
 	}
 }
 
+sub do_ISBN($) {
+	my ($isbn) = @_;
+	my @r;
+
+	my $scraper = WWW::Scraper::ISBN->new();
+	$scraper->drivers("AmazonUK","AmazonUS");
+
+	my $record = $scraper->search($isbn);
+	if($record->found) {
+		push @r, "Book ".$record->isbn." found by driver ".$record->found_in."\n";
+
+		my $book = $record->book;
+		# do stuff with book hash
+		push @r, "Title:  ",$book->{'title'},"\n";
+		push @r, "Author: ",$book->{'author'},"\n";
+
+	} else {
+		push @r, $record->error;
+	}
+
+	#print Dumper($record);
+	return @r;
+}
+
 sub do_UPC($) {
 	my ($q) = @_;
 	my @r;
@@ -105,7 +132,8 @@ sub do_UPC($) {
 		}
 		$isbn .= $isbncheck;
 		push @r, 'ISBN: ',$isbn,"\n";
-		push @r, $q->a({href=>"http://www.amazon.com/exec/obidos/ISBN=$isbn/"},"Lookup");
+		push @r, $q->a({href=>"http://www.amazon.com/exec/obidos/ISBN=$isbn/"},"Lookup"),"\n";
+		push @r, do_ISBN($isbn);
 	}
 
 out:
@@ -151,5 +179,4 @@ sub do_request() {
 }
 
 do_request();
-
 
