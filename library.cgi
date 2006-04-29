@@ -46,6 +46,33 @@ sub UPC_checkcheckdigit($) {
 	return ($check == UPC_makecheckdigit($upc));
 }
 
+sub ISBN_makecheckdigit($) {
+	my ($isbn) = @_;
+
+	if (length($isbn)!=9) {
+		# ISBN-10 without check digit
+		return undef;
+	}
+
+	my $csum;
+	$csum+= 1* substr($isbn,0,1);
+	$csum+= 2* substr($isbn,1,1);
+	$csum+= 3* substr($isbn,2,1);
+	$csum+= 4* substr($isbn,3,1);
+	$csum+= 5* substr($isbn,4,1);
+	$csum+= 6* substr($isbn,5,1);
+	$csum+= 7* substr($isbn,6,1);
+	$csum+= 8* substr($isbn,7,1);
+	$csum+= 9* substr($isbn,8,1);
+	$csum %= 11;
+
+	if ($csum == 10) {
+		return 'X';
+	} else {
+		return $csum;
+	}
+}
+
 sub do_UPC($) {
 	my ($q) = @_;
 	my @r;
@@ -62,6 +89,23 @@ sub do_UPC($) {
 	if (!UPC_checkcheckdigit($upc)) {
 		push @r, "Checksum not OK\n";
 		goto out;
+	}
+
+	# TODO - have a	list of other countries?
+	# FIXME - determine what function bookland 979 has
+	if ($upc =~ /^(978)/) {
+		push @r, "Bookland!\n";
+
+		my $isbn = substr($upc,3);
+		chop($isbn);
+		my $isbncheck = ISBN_makecheckdigit($isbn);
+		if (!defined $isbncheck) {
+			push @r, "length error in isbn check digit generation\n";
+			goto out;
+		}
+		$isbn .= $isbncheck;
+		push @r, 'ISBN: ',$isbn,"\n";
+		push @r, $q->a({href=>"http://www.amazon.com/exec/obidos/ISBN=$isbn/"},"Lookup");
 	}
 
 out:
@@ -102,6 +146,8 @@ sub do_request() {
 
 
 	print @result;
+
+	#print Dumper(\@result);
 }
 
 do_request();
