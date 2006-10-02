@@ -1,0 +1,36 @@
+--
+--
+--
+CREATE TABLE items (
+	realm	VARCHAR,	-- EAN13, ISDN, ...
+	id	VARCHAR,	-- The actual ID
+	index	INTEGER,	-- for more than one copy
+	home	VARCHAR,	-- 'home' location
+	location VARCHAR,	-- current location
+	title	VARCHAR,
+	author	VARCHAR,
+	text	VARCHAR,
+);
+
+
+CREATE TABLE log (
+	time	DATETIME,
+	realm	VARCHAR,
+	id	VARCHAR,
+	index	INTEGER,
+	from	VARCHAR,
+	to	VARCHAR,
+);
+
+--
+--
+--
+
+
+-- 
+CREATE TABLE identity (
+	realm	VARCHAR,	-- EAN13, ISDN, ...
+	id	VARCHAR,	-- The actual ID
+);
+
+

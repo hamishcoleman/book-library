@@ -1,0 +1,50 @@
+
+
+present page with empty input field.
+
+if no params, finish.
+
+if input is present but empty,
+	use hidden fields perform action
+	(see more info below)
+
+present input param 'Barcode: XXXXX'
+
+if input is 13 digits and passes EAN13 checksum, then type='EAN13'
+if input is 10 digits and passes ISBN checksum then type='ISBN'
+if type='EAN13' and /^978/ then type='ISBN' and value is transformed
+
+present type 'is a XXXX'
+if value has been transformed
+	present value 'XXXXX'
+
+lookup type,value
+
+if not found
+	if type='ISBN'
+		use WWW::Scraper::ISBN
+
+	present item type field
+	present item name field
+	present item author field
+	set location to 'Shelf'
+
+if location='Shelf'
+	set location to default borrower
+
+if location!='Shelf'
+	set location to shelf
+
+present location dropdown list 'move to XXXXX'
+present hidden type,value
+present OK and Cancel buttons
+
+----
+actions:
+
+if button Cancel, pretend no params at all
+if button OK
+	update database to set location of type,value
+if empty input
+	update database to set location of type,value
+
