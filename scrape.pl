@@ -8,7 +8,8 @@ use WWW::Scraper::ISBN;
 use Data::Dumper;
 
 my $scraper = WWW::Scraper::ISBN->new();
-$scraper->drivers("AmazonUK","AmazonUS");
+#$scraper->drivers("AmazonUK","AmazonUS");
+$scraper->drivers("AmazonUS");
 
 my $isbn = $ARGV[0] || "123456789X";
 

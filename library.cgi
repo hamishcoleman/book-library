@@ -16,8 +16,7 @@ use Data::Dumper;
 use WWW::Scraper::ISBN;
 
 
-# When I say 'UPC', what I actually mean is a EAN-13...
-sub UPC_makecheckdigit($) {
+sub EAN13_makecheckdigit($) {
 	my ($upc) = @_;
 
 	if (length($upc)!=12) {
@@ -38,7 +37,7 @@ sub UPC_makecheckdigit($) {
 	}
 }
 
-sub UPC_checkcheckdigit($) {
+sub EAN13_checkcheckdigit($) {
 	my ($upc) = @_;
 
 	if (length($upc)!=13) {
@@ -46,7 +45,7 @@ sub UPC_checkcheckdigit($) {
 	}
 
 	my $check = chop($upc);
-	return ($check == UPC_makecheckdigit($upc));
+	return ($check == EAN13_makecheckdigit($upc));
 }
 
 sub ISBN_makecheckdigit($) {
@@ -81,11 +80,12 @@ sub do_ISBN($) {
 	my @r;
 
 	my $scraper = WWW::Scraper::ISBN->new();
-	$scraper->drivers("AmazonUK","AmazonUS");
+	$scraper->drivers("AmazonUS");
 
 	my $record = $scraper->search($isbn);
 	if($record->found) {
-		push @r, "Book ".$record->isbn." found by driver ".$record->found_in."\n";
+		push @r, "ISBN: ",$record->isbn,"\n",
+			"driver: ",$record->found_in,"\n";
 
 		my $book = $record->book;
 		# do stuff with book hash
@@ -93,7 +93,7 @@ sub do_ISBN($) {
 		push @r, "Author: ",$book->{'author'},"\n";
 
 	} else {
-		push @r, $record->error;
+		push @r, "Error: ",$record->error;
 	}
 
 	#print Dumper($record);
@@ -103,20 +103,21 @@ sub do_ISBN($) {
 sub do_UPC($) {
 	my ($q) = @_;
 	my @r;
-	my $upc = $q->param('UPC');
+	my $upc = $q->param('code');
 
-	push @r, 'upc:',$upc;
-	push @r, '<pre>';
+	push @r, "<pre>\n";
+	push @r, "code: $upc\n";
 
 	if ($upc !~ /^\d+$/) {
 		push @r, "Not a digit string\n";
 		goto out;
 	}
 
-	if (!UPC_checkcheckdigit($upc)) {
+	if (!EAN13_checkcheckdigit($upc)) {
 		push @r, "Checksum not OK\n";
 		goto out;
 	}
+	push @r, "EAN13\n";
 
 	# TODO - have a	list of other countries?
 	# FIXME - determine what function bookland 979 has
@@ -131,8 +132,8 @@ sub do_UPC($) {
 			goto out;
 		}
 		$isbn .= $isbncheck;
-		push @r, 'ISBN: ',$isbn,"\n";
-		push @r, $q->a({href=>"http://www.amazon.com/exec/obidos/ISBN=$isbn/"},"Lookup"),"\n";
+		push @r, "ISBN: $isbn ";
+		push @r, $q->a({href=>"http://www.amazon.com/exec/obidos/ISBN=$isbn/"},"Amazon.com"),"\n";
 		push @r, do_ISBN($isbn);
 	}
 
@@ -151,20 +152,20 @@ sub do_request() {
 		$q->start_html(
 			-title=>'simple library interface',
 			-onLoad=>'focus()',
-			-script=>'function focus(){document.s.UPC.focus();}');
+			-script=>'function focus(){document.s.code.focus();}');
 
 	push @result,
 		# WTF TODO FIXME EVIL HACK
 		# using this method causes some wierd undefined string warning
-		#$q->start_form(-name=>'add'),
+		#$q->start_form(-name=>'s'),
 		'<form method="post" action="" enctype="multipart/form-data" name="s">',
-		'UPC:',
-		$q->textfield(-name=>'UPC', -value=>'', -override=>1,
-			-size=>20, -maxlength=>20),
+		'Barcode:',
+		$q->textfield(-name=>'code', -value=>'', -override=>1,
+			-size=>20),
 		$q->endform(),
 		;
 
-	if (defined $q->param('UPC')) {	
+	if (defined $q->param('code')) {	
 		push @result,
 			do_UPC($q),
 	}
