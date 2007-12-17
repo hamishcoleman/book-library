@@ -1,0 +1,179 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+#
+# Given an ISBN, look it up
+#
+
+our $VERSION=0;
+
+use Getopt::Long 2.33 qw(:config gnu_getopt);
+use Pod::Usage;
+
+use FileHandle;
+
+use Data::Dumper;
+$Data::Dumper::Indent = 1;
+$Data::Dumper::Sortkeys = 1;
+
+use XML::LibXML;
+
+###############################################################################
+##
+## Standard options processor
+sub do_options(%@) {
+	my $option = shift;
+	GetOptions($option,@_) or pod2usage(2);
+	pod2usage(-exitstatus => 0, -verbose => 2) if $option->{man};
+
+	if ($option->{quiet}) {
+		delete $option->{verbose};
+	}
+}
+
+###############################################################################
+
+my $option={};          # set option defaults here
+$option->{verbose}=0;
+$option->{key}='CHANGEME';
+# remember to update the SYNOPSIS and OPTIONS when this changes
+do_options($option,
+		"man",
+		"verbose|v+",
+		"quiet|q",
+		"key=s",
+		"isbn=s",
+		"xml=s",
+		"stdin",
+		"log=s",
+);
+
+sub dump_res($$) {
+	my ($desc, $res) = @_;
+
+	if (!$res->is_success) {
+		print "DUMP RES: $desc\n";
+		print "Status:", $res->status_line, "\n";
+		print Dumper($res);
+		die "!is_success";
+	}
+
+	if ($option->{verbose}>1) {
+		print "DUMP RES: $desc\n";
+	}
+	if ($option->{verbose}>1) {
+		print Dumper($res);
+	}
+}
+
+sub http_setup() {
+	use LWP::UserAgent;
+	use HTTP::Cookies;
+	my $ua = LWP::UserAgent->new;
+	$ua->agent("Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.1.3) Gecko/20070310");
+	$ua->cookie_jar(HTTP::Cookies->new());
+
+	# LWP talks about RFC 2616 when it says that POST's cannot redirect
+	# I have looked up the standard and it does not appear to say that
+	#
+	# FIXME - find out why LWP wants this in the face of the above comment
+	push @{ $ua->requests_redirectable }, 'POST';
+
+	return $ua;
+}
+
+sub isbn_get($$$) {
+	my ($ua,$key,$isbn) = @_;
+
+	my $url = "http://isbndb.com/api/books.xml?access_key=$key&results=details,texts,prices,authors,keystats&index1=isbn&value1=$isbn";
+
+	my $req = HTTP::Request->new(GET => $url);
+	my $res = $ua->request($req);
+	dump_res('get',$res);
+
+	return $res;
+}
+
+# FIXME - globals
+my $parser = XML::LibXML->new();
+sub isbn_xml($) {
+	my ($text) = @_;
+	my $res;
+
+	my $doc = $parser->parse_string($text);
+	if (!$doc) { die "not doc"; }
+	my $root = $doc->getDocumentElement();
+
+	for my $node ($root->getElementsByTagName('BookData')) {
+		$res.=$node->getAttribute('isbn')."\t";
+		for my $title ($node->getElementsByTagName('Title')) {
+			$res.=$title->textContent().", ";
+		}
+		for my $title ($node->getElementsByTagName('AuthorsText')) {
+			$res.=$title->textContent().", ";
+		}
+		$res.="\n";
+	}
+
+	if (!defined $res) {
+		$res = "NOT FOUND\n";
+	}
+	return $res;
+}
+
+sub addlog {
+	if (!$option->{log}) {
+		return;
+	}
+	if (!$option->{logfh}) {
+		$option->{logfh} = new FileHandle $option->{log},"a";
+		if (!defined $option->{logfh}) {
+			die "could now open $option->{log} $!\n";
+		}
+	}
+	$option->{logfh}->print(@_);
+}
+
+if ( !defined($option->{key})){
+	die "must specify access key";
+}
+
+my $ua = http_setup();
+
+if ($option->{xml}) {
+	my $xml = $option->{xml};
+	my $text = isbn_xml($xml);
+	print $text;
+	addlog("NEWRECORD\n");	# a record separator
+	addlog($xml,"\n");
+	addlog("T xx\t$text");
+	exit;
+}
+
+if ($option->{stdin}) {
+	while(<>) {
+		chomp;
+		if ($_ =~ m/^[0-9]/) {
+			# TODO - split input at first non digit
+			print "$_\t";
+			my $res = isbn_get($ua,$option->{key},$_);
+			my $text = isbn_xml($res->content);
+			print $text;
+			addlog("NEWRECORD\n");	# a record separator
+			addlog($res->content,"\n");
+			addlog("T $_\t$text");
+		} else {
+			# some kind of manual entry
+			addlog("NEWRECORD\n");	# a record separator
+			addlog("M $_\n");
+		}
+	}
+} elsif (!defined($option->{isbn})) {
+	die "Must specify isbn";
+} else {
+	my $res = isbn_get($ua,$option->{key},$option->{isbn});
+	print Dumper($res);
+	print isbn_xml($res->content);
+}
+
+__END__
