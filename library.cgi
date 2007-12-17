@@ -13,8 +13,6 @@ use CGI;
 use CGI::Carp qw(fatalsToBrowser);
 use Data::Dumper;
 
-use WWW::Scraper::ISBN;
-
 
 sub EAN13_makecheckdigit($) {
 	my ($upc) = @_;
@@ -75,45 +73,58 @@ sub ISBN_makecheckdigit($) {
 	}
 }
 
+sub ISBN_checkcheckdigit($) {
+	my ($s) = @_;
+
+	if (length($s)!=10) {
+		return undef;
+	}
+
+	my $check = chop($s);
+	return ($check == ISBN_makecheckdigit($s));
+}
+
 sub do_ISBN($) {
 	my ($isbn) = @_;
 	my @r;
 
-	my $scraper = WWW::Scraper::ISBN->new();
-	$scraper->drivers("AmazonUS");
+	# the scraper is a) broken, b) constantly rebreaks, c) annoying to install, d) superceeded
+	return;
 
-	my $record = $scraper->search($isbn);
-	if($record->found) {
-		push @r, "ISBN: ",$record->isbn,"\n",
-			"driver: ",$record->found_in,"\n";
-
-		my $book = $record->book;
-		# do stuff with book hash
-		push @r, "Title:  ",$book->{'title'},"\n";
-		push @r, "Author: ",$book->{'author'},"\n";
-
-	} else {
-		push @r, "Error: ",$record->error;
-	}
-
-	#print Dumper($record);
-	return @r;
+#	my $scraper = WWW::Scraper::ISBN->new();
+#	$scraper->drivers("AmazonUS");
+#
+#	my $record = $scraper->search($isbn);
+#	if($record->found) {
+#		push @r, "ISBN: ",$record->isbn,"\n",
+#			"driver: ",$record->found_in,"\n";
+#
+#		my $book = $record->book;
+#		# do stuff with book hash
+#		push @r, "Title:  ",$book->{'title'},"\n";
+#		push @r, "Author: ",$book->{'author'},"\n";
+#
+#	} else {
+#		push @r, "Error: ",$record->error;
+#	}
+#
+#	#print Dumper($record);
+#	return @r;
 }
 
-sub do_UPC($) {
-	my ($q) = @_;
+sub do_UPC($$) {
+	my ($q,$search) = @_;
 	my @r;
-	my $upc = $q->param('code');
 
 	push @r, "<pre>\n";
-	push @r, "code: $upc\n";
+	push @r, "search: $search\n";
 
-	if ($upc !~ /^\d+$/) {
+	if ($search !~ /^\d+$/) {
 		push @r, "Not a digit string\n";
 		goto out;
 	}
 
-	if (!EAN13_checkcheckdigit($upc)) {
+	if (!EAN13_checkcheckdigit($search)) {
 		push @r, "Checksum not OK\n";
 		goto out;
 	}
@@ -121,10 +132,10 @@ sub do_UPC($) {
 
 	# TODO - have a	list of other countries?
 	# FIXME - determine what function bookland 979 has
-	if ($upc =~ /^(978)/) {
+	if ($search =~ /^(978)/) {
 		push @r, "Bookland!\n";
 
-		my $isbn = substr($upc,3);
+		my $isbn = substr($search,3);
 		chop($isbn);
 		my $isbncheck = ISBN_makecheckdigit($isbn);
 		if (!defined $isbncheck) {
@@ -140,6 +151,65 @@ sub do_UPC($) {
 out:
 	push @r, '</pre>';
 
+	return @r;
+}
+
+sub do_search($$) {
+	my ($q,$search) = @_;
+	my $db;
+	my @r;
+
+
+	push @r, "<pre>\n";
+	push @r, "Search: $search\n";
+
+	# Remove unwanted characters
+	$search =~ s/[ -]+//g;
+	$db->{search} = $search;
+
+	# Validate contents as digits and x only
+	if ($search !~ /^[\dxX]+$/) {
+		$db->{type} = "NONDIGIT";
+		push @r, "Validate: search is not a digit or x\n";
+		goto out;
+	}
+	
+	if (EAN13_checkcheckdigit($search)) {
+		$db->{type} = "EAN13";
+		push @r, "Validate: EAN13: Valid\n";
+	} else {
+		push @r, "Validate: EAN13: Invalid\n";
+	}
+
+	if (ISBN_checkcheckdigit($search)) {
+		$db->{type} = "ISBN";
+		push @r, "Validate: ISBN: Valid\n";
+	} else {
+		push @r, "Validate: ISBN: Invalid\n";
+	}
+
+	if (length($search)==9 &&
+		ISBN_checkcheckdigit('0'.$search)) {
+		$db->{search} = '0'.$search;
+		$db->{type} = "ISBN";
+		$db->{origtype} = "ISBN 9 digit";
+		push @r, "Validate: ISBN 9 digit: Valid\n";
+	} else {
+		push @r, "Validate: ISBN 9 digit: Invalid\n";
+	}
+
+	if ($db->{type} eq 'EAN13') {
+		my $prefix = substr($db->{search},0,3);
+		if ($prefix eq '978' || $prefix eq '979') {
+			$db->{type} = "ISBN";
+			$db->{origtype} = "EAN13";
+		}
+	}
+
+	push @r, "Type: $db->{type}\n";
+
+out:
+	push @r, '</pre>';
 	return @r;
 }
 
@@ -159,15 +229,15 @@ sub do_request() {
 		# using this method causes some wierd undefined string warning
 		#$q->start_form(-name=>'s'),
 		'<form method="post" action="" enctype="multipart/form-data" name="s">',
-		'Barcode:',
-		$q->textfield(-name=>'code', -value=>'', -override=>1,
+		'Search:',
+		$q->textfield(-name=>'search', -value=>'', -override=>1,
 			-size=>20),
 		$q->endform(),
 		;
 
-	if (defined $q->param('code')) {	
+	if (defined $q->param('search')) {
 		push @result,
-			do_UPC($q),
+			do_search($q,$q->param('search')),
 	}
 
 	push @result,
