@@ -11,7 +11,11 @@ use strict;
 # Libs we need.
 use CGI;
 use CGI::Carp qw(fatalsToBrowser);
+use XML::LibXML;
+
 use Data::Dumper;
+$Data::Dumper::Indent = 1;
+$Data::Dumper::Sortkeys = 1;
 
 
 sub EAN13_makecheckdigit($) {
@@ -84,6 +88,34 @@ sub ISBN_checkcheckdigit($) {
 	return ($check == ISBN_makecheckdigit($s));
 }
 
+sub http_setup() {
+	use LWP::UserAgent;
+	use HTTP::Cookies;
+	my $ua = LWP::UserAgent->new;
+	$ua->agent("Mozilla/5.0 (X11; U; Linux i686; en-US; rv:1.8.1.3) Gecko/20070310");
+	$ua->cookie_jar(HTTP::Cookies->new());
+
+	# LWP talks about RFC 2616 when it says that POST's cannot redirect
+	# I have looked up the standard and it does not appear to say that
+	#
+	# FIXME - find out why LWP wants this in the face of the above comment
+	push @{ $ua->requests_redirectable }, 'POST';
+
+	return $ua;
+}
+
+sub isbn_get($$$) {
+	my ($ua,$key,$isbn) = @_;
+
+	my $url = "http://isbndb.com/api/books.xml?access_key=$key&results=details,texts,prices,authors,keystats&index1=isbn&value1=$isbn";
+
+	my $req = HTTP::Request->new(GET => $url);
+	my $res = $ua->request($req);
+	#dump_res('get',$res);
+
+	return $res;
+}
+
 sub do_ISBN($) {
 	my ($isbn) = @_;
 	my @r;
@@ -110,6 +142,80 @@ sub do_ISBN($) {
 #
 #	#print Dumper($record);
 #	return @r;
+}
+
+# FIXME - globals
+my $parser = XML::LibXML->new();
+sub isbn_xml($) {
+	my ($db) = @_;
+
+	my $doc = $parser->parse_string($db->{xml});
+	if (!$doc) { $db->{error}='!doc'; return $db; }
+	my $root = $doc->getDocumentElement();
+
+	my $isbndb = $root;
+	#for my $i ($root->getElementsByTagName('ISBNdb')) {$isbndb=$i;}
+	if (!$isbndb) { $db->{error}='!ISBNdb'; return $db; }
+	
+	my $keystats = ($isbndb->getElementsByTagName('KeyStats'))[0];
+	if (!$isbndb) { $db->{error}='!KeyStats'; return $db; }
+	
+	$db->{KeyStats}->{granted} = $keystats->getAttribute('granted');
+
+	my $booklist = ($isbndb->getElementsByTagName('BookList'))[0];
+	if (!$booklist) { $db->{error}='!BookList'; return $db; }
+
+	$db->{BookList}->{shown_results} = $booklist->getAttribute('shown_results');
+
+	for my $book ($booklist->getElementsByTagName('BookData')) {
+		my $id = $book->getAttribute('book_id');
+		$db->{BookData}->{$id}={};
+		my $entry = $db->{BookData}->{$id};
+
+		$entry->{ISBN} = $book->getAttribute('isbn');
+
+		$entry->{Title} = ($book->getElementsByTagName('Title'))[0]->textContent();
+		#$entry->{AuthorsText} = ($book->getElementsByTagName('AuthorsText'))[0]->textContent();
+		$entry->{Summary} = ($book->getElementsByTagName('Summary'))[0]->textContent();
+
+		my $prices = ($isbndb->getElementsByTagName('Prices'))[0];
+		for my $price ($prices->getElementsByTagName('Price')) {
+			my $id = $price->getAttribute('store_id');
+
+			$entry->{Prices}->{$id}->{currency} = $price->getAttribute('currency_code');
+			$entry->{Prices}->{$id}->{price} = $price->getAttribute('price');
+		}
+
+		my $authors = ($isbndb->getElementsByTagName('Authors'))[0];
+		for my $person ($authors->getElementsByTagName('Person')) {
+			my $id = $person->getAttribute('person_id');
+
+			$entry->{Authors}->{$id} = $person->textContent();
+		}
+	}
+
+	return $db;
+}
+
+sub emit_tr($) {
+	my ($db) = @_;
+	my @r;
+		
+	for my $book_id (keys %{$db->{BookData}}) {
+		my $book = $db->{BookData}->{$book_id};
+		push @r,'<tr>';
+		push @r,'<td>',$book->{ISBN},'</td>';
+		push @r,'<td>',$book->{Title},'</td>';
+		push @r,'<td>';
+		for my $person_id (keys %{$book->{Authors}}) {
+			push @r,$book->{Authors}->{$person_id},'<br/>';
+		}
+		push @r,'</td>';
+		push @r,'<td>',$book->{Summary},'</td>';
+		push @r,'</tr>';
+	}
+	
+	return @r;
 }
 
 sub do_UPC($$) {
@@ -154,14 +260,9 @@ out:
 	return @r;
 }
 
-sub do_search($$) {
-	my ($q,$search) = @_;
-	my $db;
+sub do_validate($$) {
+	my ($db,$search) = @_;
 	my @r;
-
-
-	push @r, "<pre>\n";
-	push @r, "Search: $search\n";
 
 	# Remove unwanted characters
 	$search =~ s/[ -]+//g;
@@ -171,7 +272,7 @@ sub do_search($$) {
 	if ($search !~ /^[\dxX]+$/) {
 		$db->{type} = "NONDIGIT";
 		push @r, "Validate: search is not a digit or x\n";
-		goto out;
+		return @r;
 	}
 	
 	if (EAN13_checkcheckdigit($search)) {
@@ -197,32 +298,64 @@ sub do_search($$) {
 	} else {
 		push @r, "Validate: ISBN 9 digit: Invalid\n";
 	}
+	return @r;
+}
 
+sub do_normalise($) {
+	my ($db) = @_;
+	my @r;
+	
 	if ($db->{type} eq 'EAN13') {
 		my $prefix = substr($db->{search},0,3);
-		if ($prefix eq '978' || $prefix eq '979') {
+
+		if ($prefix eq '978') {
+			# convert to 'old' ISBN format
+			my $isbn = substr($db->{search},3);
+			chop($isbn);
+			my $isbncheck = ISBN_makecheckdigit($isbn);
+			if (!defined $isbncheck) {
+				push @r, "length error in isbn check digit generation\n";
+				goto out;
+			}
+			$db->{search} = $isbn . $isbncheck;
+			$db->{type} = "ISBN";
+			$db->{origtype} = "EAN13 Bookland";
+		}
+
+		if ($prefix eq '979') {
 			$db->{type} = "ISBN";
 			$db->{origtype} = "EAN13";
 		}
 	}
+	return @r;
+}
 
-	push @r, "Type: $db->{type}\n";
+sub do_search($) {
+	my ($db) = @_;
+	my @r;
 
-out:
-	push @r, '</pre>';
+	push @r, "Type: $db->{type}\n\n";
+
+	if ($db->{type} eq 'ISBN') {
+		my $ua = http_setup();
+		$db->{xml} = isbn_get($ua,'CHANGEME',$db->{search})->content;
+	}
+
 	return @r;
 }
 
 sub do_request() {
 	my $q = new CGI;
+	my $db = {};
 	my @result;
+	my @result_head;
 
 	print $q->header();
-	push @result,
+	push @result_head,
 		$q->start_html(
 			-title=>'simple library interface',
 			-onLoad=>'focus()',
-			-script=>'function focus(){document.s.code.focus();}');
+			-script=>'function focus(){document.s.search.focus();}');
 
 	push @result,
 		# WTF TODO FIXME EVIL HACK
@@ -236,15 +369,32 @@ sub do_request() {
 		;
 
 	if (defined $q->param('search')) {
-		push @result,
-			do_search($q,$q->param('search')),
+		my $search = $q->param('search');
+		push @result, "<pre>\n";
+		push @result, "Search: $search\n";
+
+		push @result, do_validate($db,$search);
+		push @result, do_normalise($db);
+		push @result, do_search($db);
+
+		push @result, Dumper(isbn_xml($db));
+
+		push @result_head,"<table border='2' cellpadding='4' cellspacing='0' style='margin: 1em 1em 1em 0; background: #f9f9f9; border: 1px #aaa solid; border-collapse: collapse; font-size: 95%;'>";
+		push @result_head,"<tr><th>ISBN<th>Title<th>Author<th>Summary</tr>";
+
+		push @result_head, emit_tr($db);
+		push @result_head,"</table>";
+
+		#push @result, $db->{xml};
+
+		push @result, '</pre>';
 	}
 
 	push @result,
 		$q->end_html();
 
 
-	print @result;
+	print @result_head, @result;
 
 	#print Dumper(\@result);
 }
