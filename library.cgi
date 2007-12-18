@@ -104,18 +104,6 @@ sub http_setup() {
 	return $ua;
 }
 
-sub isbn_get($$$) {
-	my ($ua,$key,$isbn) = @_;
-
-	my $url = "http://isbndb.com/api/books.xml?access_key=$key&results=details,texts,prices,authors,keystats&index1=isbn&value1=$isbn";
-
-	my $req = HTTP::Request->new(GET => $url);
-	my $res = $ua->request($req);
-	#dump_res('get',$res);
-
-	return $res;
-}
-
 # FIXME - globals
 my $parser = XML::LibXML->new();
 sub isbn_xml($) {
@@ -165,6 +153,24 @@ sub isbn_xml($) {
 			$entry->{Authors}->{$id} = $person->textContent();
 		}
 	}
+
+	return $db;
+}
+
+sub isbn_get($$$) {
+	my ($db,$key,$isbn) = @_;
+	my $ua = http_setup();	# TODO - cache this for multiple accesses
+
+	my $url = "http://isbndb.com/api/books.xml?access_key=$key&results=details,texts,prices,authors,keystats&index1=isbn&value1=$isbn";
+
+	my $req = HTTP::Request->new(GET => $url);
+	my $res = $ua->request($req);
+	#dump_res('get',$res);
+
+	$db->{xml} = $res->content;
+
+	# extract the returned infor from XML into the db
+	isbn_xml($db);
 
 	return $db;
 }
@@ -266,9 +272,10 @@ sub do_search($) {
 
 	push @r, "Type: $db->{type}\n\n";
 
+	# TODO - cache the data
+
 	if ($db->{type} eq 'ISBN') {
-		my $ua = http_setup();
-		$db->{xml} = isbn_get($ua,'CHANGEME',$db->{search})->content;
+		isbn_get($db,'CHANGEME',$db->{search});
 	}
 
 	return @r;
@@ -307,7 +314,7 @@ sub do_request() {
 		push @result, do_normalise($db);
 		push @result, do_search($db);
 
-		push @result, Dumper(isbn_xml($db));
+		push @result, Dumper($db);
 
 		push @result_head,"<table border='2' cellpadding='4' cellspacing='0' style='margin: 1em 1em 1em 0; background: #f9f9f9; border: 1px #aaa solid; border-collapse: collapse; font-size: 95%;'>";
 		push @result_head,"<tr><th>ISBN<th>Title<th>Author<th>Summary</tr>";
