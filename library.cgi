@@ -116,34 +116,6 @@ sub isbn_get($$$) {
 	return $res;
 }
 
-sub do_ISBN($) {
-	my ($isbn) = @_;
-	my @r;
-
-	# the scraper is a) broken, b) constantly rebreaks, c) annoying to install, d) superceeded
-	return;
-
-#	my $scraper = WWW::Scraper::ISBN->new();
-#	$scraper->drivers("AmazonUS");
-#
-#	my $record = $scraper->search($isbn);
-#	if($record->found) {
-#		push @r, "ISBN: ",$record->isbn,"\n",
-#			"driver: ",$record->found_in,"\n";
-#
-#		my $book = $record->book;
-#		# do stuff with book hash
-#		push @r, "Title:  ",$book->{'title'},"\n";
-#		push @r, "Author: ",$book->{'author'},"\n";
-#
-#	} else {
-#		push @r, "Error: ",$record->error;
-#	}
-#
-#	#print Dumper($record);
-#	return @r;
-}
-
 # FIXME - globals
 my $parser = XML::LibXML->new();
 sub isbn_xml($) {
@@ -215,48 +187,6 @@ sub emit_tr($) {
 		push @r,'</tr>';
 	}
 	
-	return @r;
-}
-
-sub do_UPC($$) {
-	my ($q,$search) = @_;
-	my @r;
-
-	push @r, "<pre>\n";
-	push @r, "search: $search\n";
-
-	if ($search !~ /^\d+$/) {
-		push @r, "Not a digit string\n";
-		goto out;
-	}
-
-	if (!EAN13_checkcheckdigit($search)) {
-		push @r, "Checksum not OK\n";
-		goto out;
-	}
-	push @r, "EAN13\n";
-
-	# TODO - have a	list of other countries?
-	# FIXME - determine what function bookland 979 has
-	if ($search =~ /^(978)/) {
-		push @r, "Bookland!\n";
-
-		my $isbn = substr($search,3);
-		chop($isbn);
-		my $isbncheck = ISBN_makecheckdigit($isbn);
-		if (!defined $isbncheck) {
-			push @r, "length error in isbn check digit generation\n";
-			goto out;
-		}
-		$isbn .= $isbncheck;
-		push @r, "ISBN: $isbn ";
-		push @r, $q->a({href=>"http://www.amazon.com/exec/obidos/ISBN=$isbn/"},"Amazon.com"),"\n";
-		push @r, do_ISBN($isbn);
-	}
-
-out:
-	push @r, '</pre>';
-
 	return @r;
 }
 
