@@ -294,38 +294,51 @@ sub do_request() {
 			-onLoad=>'focus()',
 			-script=>'function focus(){document.s.search.focus();}');
 
-	push @result,
+	push @result_head,
 		# WTF TODO FIXME EVIL HACK
 		# using this method causes some wierd undefined string warning
 		#$q->start_form(-name=>'s'),
-		'<form method="post" action="" enctype="multipart/form-data" name="s">',
+		'<form method="post" action="" enctype="multipart/form-data" name="s">';
+
+	push @result,
 		'Search:',
 		$q->textfield(-name=>'search', -value=>'', -override=>1,
 			-size=>20),
+		$q->submit();
 		$q->endform(),
 		;
+	push @result, "<pre>\n";
+
+	if (defined $q->param('title')) {
+		push @result, "New Title: ",$q->param('title'),"\n";
+	}
 
 	if (defined $q->param('search')) {
 		my $search = $q->param('search');
-		push @result, "<pre>\n";
 		push @result, "Search: $search\n";
 
 		push @result, do_validate($db,$search);
 		push @result, do_normalise($db);
 		push @result, do_search($db);
 
-		push @result, Dumper($db);
-
 		push @result_head,"<table border='2' cellpadding='4' cellspacing='0' style='margin: 1em 1em 1em 0; background: #f9f9f9; border: 1px #aaa solid; border-collapse: collapse; font-size: 95%;'>";
 		push @result_head,"<tr><th>ISBN<th>Title<th>Author<th>Summary</tr>";
+
+		if ($db->{BookList}->{shown_results}<1) {
+			push @result,"Book Not Found - showing empty form\n";
+			$db->{BookData}->{new}->{ISBN} = $q->hidden(-name=>'isbn',-default=>$db->{search}).$db->{search};
+			$db->{BookData}->{new}->{Authors}->{new} = $q->textfield(-name=>'author', -size=>20);
+			$db->{BookData}->{new}->{Title} = $q->textfield(-name=>'title', -size=>20);
+			$db->{BookData}->{new}->{Summary} = $q->textfield(-name=>'summary', -size=>20);
+		}
+		# FIXME - dont misuse emit_tr like this
 
 		push @result_head, emit_tr($db);
 		push @result_head,"</table>";
 
-		#push @result, $db->{xml};
-
-		push @result, '</pre>';
+		push @result, Dumper($db);
 	}
+	push @result, '</pre>';
 
 	push @result,
 		$q->end_html();
