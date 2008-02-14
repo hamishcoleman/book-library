@@ -128,7 +128,7 @@ sub addlog {
 	if (!$option->{logfh}) {
 		$option->{logfh} = new FileHandle $option->{log},"a";
 		if (!defined $option->{logfh}) {
-			die "could now open $option->{log} $!\n";
+			die "could not open $option->{log} $!\n";
 		}
 	}
 	$option->{logfh}->print(@_);
