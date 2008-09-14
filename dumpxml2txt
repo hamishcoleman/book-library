@@ -48,6 +48,9 @@ sub isbn_xml($) {
 		#$entry->{AuthorsText} = ($book->getElementsByTagName('AuthorsText'))[0]->textContent();
 		$entry->{Summary} = ($book->getElementsByTagName('Summary'))[0]->textContent();
 
+		my $details = ($book->getElementsByTagName('Details'))[0];
+		$entry->{Details}{edition_info} = $details->getAttribute('edition_info');
+
 		my $prices = ($book->getElementsByTagName('Prices'))[0];
 		for my $price ($prices->getElementsByTagName('Price')) {
 			my $id = $price->getAttribute('store_id');
