@@ -1,0 +1,124 @@
+#!/usr/bin/perl -w
+use strict;
+#
+# Load an XML isbndb database and dump it in HTML
+#
+
+##########################################################################
+#
+# Libs we need.
+use CGI;
+use XML::LibXML;
+
+use Data::Dumper;
+$Data::Dumper::Indent = 1;
+$Data::Dumper::Sortkeys = 1;
+
+# FIXME - globals
+my $parser = XML::LibXML->new();
+sub isbn_xml($) {
+	my ($filename) = @_;
+	my $db={};
+
+	my $doc = $parser->parse_file($filename);
+	if (!$doc) { $db->{error}='!doc'; return $db; }
+	my $root = $doc->getDocumentElement();
+
+	my $isbndb = $root;
+	#for my $i ($root->getElementsByTagName('ISBNdb')) {$isbndb=$i;}
+	if (!$isbndb) { $db->{error}='!ISBNdb'; return $db; }
+	
+	#my $keystats = ($isbndb->getElementsByTagName('KeyStats'))[0];
+	#if (!$keystats) { $db->{error}='!KeyStats'; return $db; }
+	#$db->{KeyStats}->{granted} = $keystats->getAttribute('granted');
+
+	#my $booklist = ($isbndb->getElementsByTagName('BookList'))[0];
+	#if (!$booklist) { $db->{error}='!BookList'; return $db; }
+	#$db->{BookList}->{shown_results} = $booklist->getAttribute('shown_results');
+
+
+	for my $book ($isbndb->getElementsByTagName('BookData')) {
+		my $id = $book->getAttribute('book_id');
+		$db->{BookData}->{$id}={};
+		my $entry = $db->{BookData}->{$id};
+
+		$entry->{ISBN} = $book->getAttribute('isbn');
+
+		$entry->{Title} = ($book->getElementsByTagName('Title'))[0]->textContent();
+		#$entry->{AuthorsText} = ($book->getElementsByTagName('AuthorsText'))[0]->textContent();
+		$entry->{Summary} = ($book->getElementsByTagName('Summary'))[0]->textContent();
+
+		my $prices = ($book->getElementsByTagName('Prices'))[0];
+		for my $price ($prices->getElementsByTagName('Price')) {
+			my $id = $price->getAttribute('store_id');
+
+			$entry->{Prices}->{$id}->{currency} = $price->getAttribute('currency_code');
+			$entry->{Prices}->{$id}->{price} = $price->getAttribute('price');
+		}
+
+		my $authors = ($book->getElementsByTagName('Authors'))[0];
+		for my $person ($authors->getElementsByTagName('Person')) {
+			my $id = $person->getAttribute('person_id');
+
+			$entry->{Authors}->{$id} = $person->textContent();
+		}
+	}
+
+	return $db;
+}
+
+sub emit_rows($) {
+	my ($db) = @_;
+	my @r;
+		
+	for my $book_id (keys %{$db->{BookData}}) {
+		my $book = $db->{BookData}->{$book_id};
+	
+		push @r, $book->{ISBN},';	';
+
+		my @authors;
+		for my $person_id (keys %{$book->{Authors}}) {
+			if (@authors) {
+				push @authors,' & ';
+			}
+			push @authors,$book->{Authors}->{$person_id};
+		}
+		if (!@authors) {
+			push @r,'?';
+		}
+		my $authors = join '',@authors;
+		push @r,$authors;
+		push @r,';	';
+		if (length($authors)<7) {
+			push @r,'	';
+		}
+		if (length($authors)<15) {
+			push @r,'	';
+		}
+
+		push @r,$book->{Title};
+		#push @r,';	';
+
+		#push @r,$book->{Details}{edition_info};
+		push @r,"\n";
+	}
+	
+	return @r;
+}
+
+sub do_request($) {
+	my ($filename) = @_;
+
+	my $db = isbn_xml($filename);
+
+	print ("XML Database Dump\n");
+
+	print "ISBN; Author; Title; Misc\n";
+
+	print emit_rows($db);
+
+	print Dumper($db);
+}
+
+do_request($ARGV[0]);
+
