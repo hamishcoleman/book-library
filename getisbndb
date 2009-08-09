@@ -46,6 +46,7 @@ do_options($option,
 		"xml=s",
 		"stdin",
 		"log=s",
+		"db=s",
 );
 
 sub dump_res($$) {
@@ -55,7 +56,7 @@ sub dump_res($$) {
 		print "DUMP RES: $desc\n";
 		print "Status:", $res->status_line, "\n";
 		print Dumper($res);
-		die "!is_success";
+		warn "!is_success";
 	}
 
 	if ($option->{verbose}>1) {
@@ -91,6 +92,10 @@ sub isbn_get($$$) {
 	my $res = $ua->request($req);
 	dump_res('get',$res);
 
+	if (!$res->is_success) {
+		return;
+	}
+
 	return $res;
 }
 
@@ -101,8 +106,15 @@ sub isbn_xml($) {
 	my $res;
 
 	my $doc = $parser->parse_string($text);
-	if (!$doc) { die "not doc"; }
+	if (!$doc) { warn "not doc"; }
 	my $root = $doc->getDocumentElement();
+
+	return $root;
+}
+
+sub isbn_xml2text($) {
+	my ($root) = @_;
+	my $res;
 
 	for my $node ($root->getElementsByTagName('BookData')) {
 		$res.=$node->getAttribute('isbn')."\t";
@@ -115,9 +127,6 @@ sub isbn_xml($) {
 		$res.="\n";
 	}
 
-	if (!defined $res) {
-		$res = "NOT FOUND\n";
-	}
 	return $res;
 }
 
@@ -134,46 +143,131 @@ sub addlog {
 	$option->{logfh}->print(@_);
 }
 
+sub adddb {
+	if (!$option->{db}) {
+		return;
+	}
+
+	my ($root) = @_;
+	for my $node ($root->getElementsByTagName('BookData')) {
+		$option->{db_isbndb}->appendChild($node);
+	}
+
+	# paranoid write
+	my $fh = new FileHandle $option->{db}.'.new','w';
+	if (!defined $fh) {
+		die "could not open $option->{db}.new $!\n";
+	}
+	$option->{db_doc}->toFH($fh,1);
+}
+
+sub not_found_bookdata($$) {
+	my ($isbn,$text) = @_;
+
+	my $root = XML::LibXML::Element->new('ISBNdb');
+	my $node = XML::LibXML::Element->new('BookData');
+	$root->appendChild($node);
+	$node->setAttribute('book_id','unkid'.$isbn);
+	$node->setAttribute('isbn',$isbn);
+	$node->appendTextChild('Title',$text);
+	$node->appendTextChild('AuthorsText','UNKNOWN');
+	$node->appendTextChild('Summary','This Book was not found in isbndb.com database and has been automatically created from text');
+	$node->appendTextChild('Details','');
+	$node->appendTextChild('Prices','');
+	$node->appendTextChild('Authors','');
+
+
+	return $root;
+}
+
 if ( !defined($option->{key})){
 	die "must specify access key";
+}
+
+if (!$option->{db_isbndb}) {
+	my $fh = new FileHandle $option->{db},"r";
+	if (!defined $fh) {
+		die "could not open $option->{db} $!\n";
+	}
+	$option->{db_doc} = $parser->parse_fh($fh);
+	# TODO - warn / create an empty document on fail
+	$option->{db_isbndb} = $option->{db_doc}->getDocumentElement();
 }
 
 my $ua = http_setup();
 
 if ($option->{xml}) {
 	my $xml = $option->{xml};
-	my $text = isbn_xml($xml);
+	my $root = isbn_xml($xml);
+	my $text = isbn_xml2text($root);
+	if (!defined $text) {
+		$text = "NOT FOUND\n";
+	}
 	print $text;
 	addlog("NEWRECORD\n");	# a record separator
 	addlog($xml,"\n");
 	addlog("T xx\t$text");
+	adddb($root);
 	exit;
 }
 
 if ($option->{stdin}) {
+	# prompt
+	print "> ";
+	my $prev_not_found;
 	while(<>) {
 		chomp;
+
 		if ($_ =~ m/^[0-9]/) {
 			# TODO - split input at first non digit
 			print "$_\t";
 			my $res = isbn_get($ua,$option->{key},$_);
-			my $text = isbn_xml($res->content);
-			print $text;
-			addlog("NEWRECORD\n");	# a record separator
-			addlog($res->content,"\n");
-			addlog("T $_\t$text");
+			if ($res) {
+				my $root = isbn_xml($res->content);
+				my $text = isbn_xml2text($root);
+				if (!defined $text) {
+					$text = "NOT FOUND\n";
+					$prev_not_found = $_;
+				}
+				print $text;
+				addlog("NEWRECORD\n");	# a record separator
+				addlog($res->content,"\n");
+				addlog("T $_\t$text");
+				adddb($root);
+			} else {
+				print "ERROR: getting isbn details\n";
+			}
+		} elsif ($_ =~ m/^:prev (.*)/) {
+			$prev_not_found = $1;
 		} else {
 			# some kind of manual entry
 			addlog("NEWRECORD\n");	# a record separator
 			addlog("M $_\n");
+			if ($_ && $prev_not_found) {
+				adddb(not_found_bookdata($prev_not_found,$_));
+			}
+			undef $prev_not_found;
 		}
+		# prompt
+		print "> ";
 	}
 } elsif (!defined($option->{isbn})) {
 	die "Must specify isbn";
 } else {
 	my $res = isbn_get($ua,$option->{key},$option->{isbn});
 	print Dumper($res);
-	print isbn_xml($res->content);
+	my $root = isbn_xml($res->content);
+	my $text = isbn_xml2text($root);
+	if (!defined $text) {
+		$text = "NOT FOUND\n";
+	}
+	print $text;
+	adddb($root);
+}
+
+if ($option->{db}) {
+	rename($option->{db},$option->{db}.'.old');
+	rename($option->{db}.'.new',$option->{db});
 }
 
 __END__
