@@ -70,6 +70,9 @@ sub isbn_xml($) {
 				$entry->{Authors}->{$i++} = $person->textContent();
 			}
 		}
+		if (!$entry->{Authors}) {
+			$entry->{Authors}{Text} = ($book->getElementsByTagName('AuthorsText'))[0]->textContent();
+		}
 	}
 
 	return $db;
