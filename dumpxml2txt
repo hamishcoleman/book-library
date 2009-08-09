@@ -60,10 +60,15 @@ sub isbn_xml($) {
 		}
 
 		my $authors = ($book->getElementsByTagName('Authors'))[0];
+		my $i;
 		for my $person ($authors->getElementsByTagName('Person')) {
 			my $id = $person->getAttribute('person_id');
 
-			$entry->{Authors}->{$id} = $person->textContent();
+			if ($id) {
+				$entry->{Authors}->{$id} = $person->textContent();
+			} else {
+				$entry->{Authors}->{$i++} = $person->textContent();
+			}
 		}
 	}
 
@@ -120,7 +125,7 @@ sub do_request($) {
 
 	print emit_rows($db);
 
-	print Dumper($db);
+	#print Dumper($db);
 }
 
 do_request($ARGV[0]);
