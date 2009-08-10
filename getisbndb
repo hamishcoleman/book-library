@@ -228,7 +228,7 @@ sub db_save() {
 }
 
 sub db_new_fake_isbn() {
-	my $i = $db->{_}{last_fake_isbn} || 1;
+	my $i = $db->{_}{last_fake_isbn} || 100;
 
 	my $isbn = sprintf("Z%08iZ",$i);
 	while(defined($db->{isbn}{$isbn})) {
