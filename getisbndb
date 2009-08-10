@@ -215,6 +215,19 @@ sub db_index_bookdata($) {
 	}
 }
 
+sub tag_book($$) {
+	my ($node,$tag) = @_;
+
+	my $isbn = $node->getAttribute('isbn');
+	my $oldtag = $node->getAttribute('tag');
+	if ($oldtag) {
+		delete $db->{tag}{$oldtag}{$isbn};
+	}
+
+	$node->setAttribute('tag',$tag);
+	$db->{tag}{$tag}{$isbn}=$node;
+}
+
 sub db_load($) {
 	my ($filename) = @_;
 
@@ -417,13 +430,9 @@ sub do_tag($$) {
 	print "Tagging books\n";
 	for my $i (@list) {
 		if ($db->{isbn}{$i}) {
-			my $oldtag = $db->{isbn}{$i}->getAttribute('tag');
-			if ($oldtag) {
-				delete $db->{tag}{$oldtag}{$i};
-			}
-
-			$db->{isbn}{$i}->setAttribute('tag',$tag);
-			$db->{tag}{$tag}{$i}=$db->{isbn}{$i};
+			tag_book($db->{isbn}{$i},$tag);
+		} elsif ($i eq 'last' && $db->{_}{last_added}) {
+			tag_book($db->{_}{last_added},$tag);
 		} else {
 			print "$i not found\n";
 		}
@@ -580,6 +589,8 @@ if ($option->{xml}) {
 }
 
 if ($option->{db}) {
+	# FIXME - do nothing if data has not changed
+	db_save();
 	rename($option->{db},$option->{db}.'.old');
 	rename($option->{db}.'.new',$option->{db});
 }
