@@ -268,6 +268,7 @@ sub adddb {
 		}
 
 		$db->{_}{isbndb}->appendChild($node);
+		$db->{_}{last_added} = $node;
 		db_index_bookdata($node);
 	}
 
@@ -341,11 +342,22 @@ sub do_fake($$) {
 sub do_show($$) {
 	my ($cmd,$str) = @_;
 
+	# Empty string means show index
+	if (!$str) {
+		for my $node ($db->{_}{isbndb}->getElementsByTagName('BookData')) {
+			print $node->getAttribute('isbn'),' ';
+		}
+		print "\n";
+		return;
+	}
+
 	my @list = split /\W/,$str;
 
 	for my $isbn (@list) {
 		if ($db->{isbn}{$isbn}) {
 			print $db->{isbn}{$isbn}->toString(1),"\n";
+		} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
+			print $db->{_}{last_added}->toString(1),"\n";
 		} else {
 			print "$isbn not found\n";
 		}
