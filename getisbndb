@@ -284,6 +284,20 @@ sub do_fake($$) {
 	do_prev($cmd,db_new_fake_isbn());
 }
 
+sub do_show($$) {
+	my ($cmd,$str) = @_;
+
+	my @list = split /\W/,$str;
+
+	for my $isbn (@list) {
+		if ($db->{isbn}{$isbn}) {
+			print $db->{isbn}{$isbn}->toString(1),"\n";
+		} else {
+			print "$isbn not found\n";
+		}
+	}
+}
+
 sub process_one_bookdata($$) {
 	my ($search,$root) = @_;
 
@@ -327,6 +341,7 @@ sub do_one_cmdline($$) {
 			e => \&do_eval,
 			history => \&do_history,
 			fake => \&do_fake,
+			show => \&do_show,
 		);
 
 		if ($cmds{$1}) {
@@ -363,7 +378,7 @@ sub do_repl($) {
 		$attribs->{list_completion_function};
 	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev :history :fake)];
+		[qw(:e :ls :prev :history :fake :show)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
