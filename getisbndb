@@ -178,6 +178,13 @@ sub db_index_bookdata($) {
 
 	$db->{book_id}{$node->getAttribute('book_id')} = $node;
 	$db->{isbn}{$node->getAttribute('isbn')} = $node;
+
+	my $author;
+	for my $i ($node->getElementsByTagName('AuthorsText')) {
+		$author.=$i->textContent().", ";
+	}
+
+	push @{$db->{author}{$author}},$node;
 }
 
 sub db_load($) {
@@ -298,6 +305,17 @@ sub do_show($$) {
 	}
 }
 
+#
+# Load and replace current database
+sub do_replace_db($$) {
+	my ($cmd,$str) = @_;
+
+	if ($str) {
+		$option->{db} = $str;
+	}
+	db_load($option->{db});
+}
+
 sub process_one_bookdata($$) {
 	my ($search,$root) = @_;
 
@@ -342,6 +360,7 @@ sub do_one_cmdline($$) {
 			history => \&do_history,
 			fake => \&do_fake,
 			show => \&do_show,
+			replace_db => \&do_replace_db,
 		);
 
 		if ($cmds{$1}) {
@@ -378,7 +397,7 @@ sub do_repl($) {
 		$attribs->{list_completion_function};
 	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev :history :fake :show)];
+		[qw(:e :ls :prev :history :fake :show :replace_db)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
