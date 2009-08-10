@@ -20,6 +20,7 @@ use XML::LibXML;
 
 # FIXME - globals
 my $parser = XML::LibXML->new();
+my $db={};
 
 ###############################################################################
 ##
@@ -90,6 +91,20 @@ sub http_setup() {
 	return $ua;
 }
 
+sub isbn_xml($) {
+	my ($text) = @_;
+	my $res;
+
+	my $doc = $parser->parse_string($text);
+	if (!$doc) {
+		warn "Not a valid XML document";
+		return;
+	}
+	my $root = $doc->getDocumentElement();
+
+	return $root;
+}
+
 #
 # Make an isbndb.com query and return the XML result data
 #
@@ -98,6 +113,7 @@ sub isbn_get($$$) {
 
 	my $url = "http://isbndb.com/api/books.xml?access_key=$key&results=details,texts,prices,authors,keystats&index1=isbn&value1=$isbn";
 
+	addlog('GET ',$url);
 	my $req = HTTP::Request->new(GET => $url);
 	my $res = $ua->request($req);
 	dump_res('get',$res);
@@ -105,19 +121,10 @@ sub isbn_get($$$) {
 	if (!$res->is_success) {
 		return;
 	}
+	addlog($res->content,"\n");
+	$db->{_}{isbn_get}=$res->content;
 
-	return $res->content;
-}
-
-sub isbn_xml($) {
-	my ($text) = @_;
-	my $res;
-
-	my $doc = $parser->parse_string($text);
-	if (!$doc) { warn "not doc"; }
-	my $root = $doc->getDocumentElement();
-
-	return $root;
+	return isbn_xml($res->content);
 }
 
 sub isbn_xml2text($) {
@@ -139,7 +146,7 @@ sub isbn_xml2text($) {
 }
 
 # <KeyStats granted="22" access_key="CHANGEME" requests="22" limit="500" />
-sub isbndb_granted {
+sub isbndb_granted($) {
 	my ($root) = @_;
 	my $res;
 
@@ -210,7 +217,7 @@ if ( !defined($option->{key})){
 	die "must specify access key";
 }
 
-if (!$option->{db_isbndb}) {
+if ($option->{db}) {
 	my $fh = new FileHandle $option->{db},"r";
 	if (!defined $fh) {
 		die "could not open $option->{db} $!\n";
@@ -248,18 +255,16 @@ if ($option->{stdin}) {
 		if ($_ =~ m/^[0-9]/) {
 			# TODO - split input at first non digit
 			print "$_\t";
-			my $xml = isbn_get($ua,$option->{key},$_);
-			if ($xml) {
-				my $root = isbn_xml($xml);
+			my $root = isbn_get($ua,$option->{key},$_);
+			if ($root) {
 				my $text = isbn_xml2text($root);
 				if (!defined $text) {
 					$text = "NOT FOUND\n";
 					$prev_not_found = $_;
 				}
 				print $text;
-				addlog("NEWRECORD\n");	# a record separator
-				addlog($xml,"\n");
 				addlog("T $_\t$text");
+
 				adddb($root);
 				if (defined $prev_not_found) {
 					print "P:$_ ";
@@ -291,14 +296,20 @@ if ($option->{stdin}) {
 } elsif (!defined($option->{isbn})) {
 	die "Must specify isbn";
 } else {
-	my $xml = isbn_get($ua,$option->{key},$option->{isbn});
-	my $root = isbn_xml($xml);
-	my $text = isbn_xml2text($root);
-	if (!defined $text) {
-		$text = "NOT FOUND\n";
+	my $root = isbn_get($ua,$option->{key},$option->{isbn});
+	if ($root) {
+		my $text = isbn_xml2text($root);
+		if (!defined $text) {
+			$text = "NOT FOUND\n";
+		}
+		print $text;
+		addlog("T $_\t$text");
+		adddb($root);
+		print "G:",isbndb_granted($root);
+		print "\n";
+	} else {
+		print "ERROR: getting isbn details\n";
 	}
-	print $text;
-	adddb($root);
 }
 
 if ($option->{db}) {
