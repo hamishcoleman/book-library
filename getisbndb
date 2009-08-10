@@ -203,6 +203,18 @@ sub db_save() {
 	$db->{_}{doc}->toFH($fh,1);
 }
 
+sub db_new_fake_isbn() {
+	my $i = $db->{_}{last_fake_isbn} || 1;
+
+	my $isbn = sprintf("Z%08iZ",$i);
+	while(defined($db->{isbn}{$isbn})) {
+		$i++;
+		$isbn = sprintf("Z%08iZ",$i);
+	}
+	$db->{_}{last_fake_isbn} = $i;
+	return $isbn;
+}
+
 sub adddb {
 	if (!$option->{db}) {
 		return;
@@ -265,6 +277,12 @@ sub do_history($$) {
 	print join("\n",$db->{_}{term}->GetHistory());
 }
 
+sub do_fake($$) {
+	my ($cmd,$str) = @_;
+
+	do_prev($cmd,db_new_fake_isbn());
+}
+
 sub process_one_bookdata($$) {
 	my ($search,$root) = @_;
 
@@ -301,11 +319,13 @@ sub do_one_cmdline($$) {
 
 	# cmdline
 	if ($_ =~ m/^:(\w+) ?(.*)/) {
+		# TODO more structure for this hash, including helptext
 		my %cmds = (
 			prev => \&do_prev,
 			ls => \&do_ls,
 			e => \&do_eval,
 			history => \&do_history,
+			fake => \&do_fake,
 		);
 
 		if ($cmds{$1}) {
@@ -338,7 +358,7 @@ sub do_repl($) {
 		$attribs->{list_completion_function};
 	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev :history)];
+		[qw(:e :ls :prev :history :fake)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
