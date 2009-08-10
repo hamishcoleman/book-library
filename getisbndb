@@ -5,7 +5,7 @@ use strict;
 # Given an ISBN, look it up
 #
 
-our $VERSION=0;
+our $VERSION=1;
 
 use Getopt::Long 2.33 qw(:config gnu_getopt);
 use Pod::Usage;
@@ -17,6 +17,9 @@ $Data::Dumper::Indent = 1;
 $Data::Dumper::Sortkeys = 1;
 
 use XML::LibXML;
+
+# FIXME - globals
+my $parser = XML::LibXML->new();
 
 ###############################################################################
 ##
@@ -49,6 +52,9 @@ do_options($option,
 		"db=s",
 );
 
+#
+# Generic http dumping routine
+#
 sub dump_res($$) {
 	my ($desc, $res) = @_;
 
@@ -61,12 +67,13 @@ sub dump_res($$) {
 
 	if ($option->{verbose}>1) {
 		print "DUMP RES: $desc\n";
-	}
-	if ($option->{verbose}>1) {
 		print Dumper($res);
 	}
 }
 
+#
+# Setup the LWP useragent
+#
 sub http_setup() {
 	use LWP::UserAgent;
 	use HTTP::Cookies;
@@ -83,6 +90,9 @@ sub http_setup() {
 	return $ua;
 }
 
+#
+# Make an isbndb.com query and return the XML result data
+#
 sub isbn_get($$$) {
 	my ($ua,$key,$isbn) = @_;
 
@@ -96,11 +106,9 @@ sub isbn_get($$$) {
 		return;
 	}
 
-	return $res;
+	return $res->content;
 }
 
-# FIXME - globals
-my $parser = XML::LibXML->new();
 sub isbn_xml($) {
 	my ($text) = @_;
 	my $res;
@@ -240,9 +248,9 @@ if ($option->{stdin}) {
 		if ($_ =~ m/^[0-9]/) {
 			# TODO - split input at first non digit
 			print "$_\t";
-			my $res = isbn_get($ua,$option->{key},$_);
-			if ($res) {
-				my $root = isbn_xml($res->content);
+			my $xml = isbn_get($ua,$option->{key},$_);
+			if ($xml) {
+				my $root = isbn_xml($xml);
 				my $text = isbn_xml2text($root);
 				if (!defined $text) {
 					$text = "NOT FOUND\n";
@@ -250,7 +258,7 @@ if ($option->{stdin}) {
 				}
 				print $text;
 				addlog("NEWRECORD\n");	# a record separator
-				addlog($res->content,"\n");
+				addlog($xml,"\n");
 				addlog("T $_\t$text");
 				adddb($root);
 				if (defined $prev_not_found) {
@@ -283,9 +291,8 @@ if ($option->{stdin}) {
 } elsif (!defined($option->{isbn})) {
 	die "Must specify isbn";
 } else {
-	my $res = isbn_get($ua,$option->{key},$option->{isbn});
-	print Dumper($res);
-	my $root = isbn_xml($res->content);
+	my $xml = isbn_get($ua,$option->{key},$option->{isbn});
+	my $root = isbn_xml($xml);
 	my $text = isbn_xml2text($root);
 	if (!defined $text) {
 		$text = "NOT FOUND\n";
