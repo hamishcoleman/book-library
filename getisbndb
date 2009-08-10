@@ -22,7 +22,7 @@ use Term::ReadLine;
 
 
 # FIXME - globals
-$term = new Term::ReadLine 'getisbndb';
+my $term = new Term::ReadLine 'getisbndb';
 my $parser = XML::LibXML->new();
 my $db={};
 
@@ -137,10 +137,10 @@ sub isbn_xml2text($) {
 
 	for my $node ($root->getElementsByTagName('BookData')) {
 		$res.=$node->getAttribute('isbn')."\t";
-		for my $title ($node->getElementsByTagName('Title')) {
+		for my $title ($node->getElementsByTagName('AuthorsText')) {
 			$res.=$title->textContent().", ";
 		}
-		for my $title ($node->getElementsByTagName('AuthorsText')) {
+		for my $title ($node->getElementsByTagName('Title')) {
 			$res.=$title->textContent().", ";
 		}
 		$res.="\n";
