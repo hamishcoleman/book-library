@@ -200,6 +200,10 @@ sub db_load($) {
 	# TODO - warn / create an empty document on fail
 	$db->{_}{isbndb} = $db->{_}{doc}->getDocumentElement();
 
+	$db->{isbn} = {};
+	$db->{book_id} = {};
+	$db->{author} = {};
+
 	for my $node ($db->{_}{doc}->getElementsByTagName('BookData')) {
 		db_index_bookdata($node);
 	}
