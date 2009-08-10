@@ -181,9 +181,11 @@ sub db_index_bookdata($) {
 
 	my $author;
 	for my $i ($node->getElementsByTagName('AuthorsText')) {
-		$author.=$i->textContent().", ";
+		if ($author) {
+			$author.=', ';
+		}
+		$author.=$i->textContent();
 	}
-
 	push @{$db->{author}{$author}},$node;
 }
 
