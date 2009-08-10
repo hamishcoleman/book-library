@@ -136,13 +136,23 @@ sub isbn_xml2text($) {
 	my $res;
 
 	for my $node ($root->getElementsByTagName('BookData')) {
+		my $author;
+		for my $i ($node->getElementsByTagName('AuthorsText')) {
+			if ($author) {
+				$author.=', ';
+			}
+			$author.=$i->textContent();
+		}
+		my $title;
+		for my $i ($node->getElementsByTagName('Title')) {
+			if ($title) {
+				$title.=', ';
+			}
+			$title.=$i->textContent();
+		}
 		$res.=$node->getAttribute('isbn')."\t";
-		for my $title ($node->getElementsByTagName('AuthorsText')) {
-			$res.=$title->textContent().", ";
-		}
-		for my $title ($node->getElementsByTagName('Title')) {
-			$res.=$title->textContent().", ";
-		}
+		$res.=$author.";\t";
+		$res.=$title;
 		$res.="\n";
 	}
 
