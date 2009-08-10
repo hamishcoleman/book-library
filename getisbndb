@@ -18,6 +18,9 @@ $Data::Dumper::Sortkeys = 1;
 
 use XML::LibXML;
 
+use Term::ReadLine;
+
+
 # FIXME - globals
 my $parser = XML::LibXML->new();
 my $db={};
@@ -146,14 +149,14 @@ sub isbn_xml2text($) {
 }
 
 # <KeyStats granted="22" access_key="CHANGEME" requests="22" limit="500" />
-sub isbndb_granted($) {
+sub update_keystats($) {
 	my ($root) = @_;
-	my $res;
 
 	for my $node ($root->getElementsByTagName('KeyStats')) {
-		$res = $node->getAttribute('granted');
+		$db->{_}{KeyStats}{granted} = $node->getAttribute('granted');
+		$db->{_}{KeyStats}{requests} = $node->getAttribute('requests');
+		$db->{_}{KeyStats}{limit} = $node->getAttribute('limit');
 	}
-	return $res;
 }
 
 sub addlog {
@@ -247,6 +250,20 @@ sub do_eval {
 	print "\n";
 }
 
+sub process_one_bookdata($$) {
+	my ($search,$root) = @_;
+
+	my $text = isbn_xml2text($root);
+	if (!defined $text) {
+		$text = "NOT FOUND\n";
+		$db->{_}{not_found} = $_;
+	}
+	print $text;
+	addlog("T $search\t$text");
+	adddb($root);
+	update_keystats($root);
+}
+
 sub do_one_cmdline($$) {
 	my ($ua) = shift;
 	chomp;
@@ -257,19 +274,7 @@ sub do_one_cmdline($$) {
 		print "$_\t";
 		my $root = isbn_get($ua,$option->{key},$_);
 		if ($root) {
-			my $text = isbn_xml2text($root);
-			if (!defined $text) {
-				$text = "NOT FOUND\n";
-				$db->{_}{not_found} = $_;
-			}
-			print $text;
-			addlog("T $_\t$text");
-
-			adddb($root);
-			if (defined $db->{_}{not_found}) {
-				print "P:$_ ";
-			}
-			print "G:",isbndb_granted($root);
+			process_one_bookdata($_,$root);
 		} else {
 			print "ERROR: getting isbn details\n";
 			# TODO: check if it is a EAN13 but not bookland
@@ -277,21 +282,18 @@ sub do_one_cmdline($$) {
 		}
 	} elsif ($_ =~ m/^:prev (.*)/) {
 		$db->{_}{not_found} = $1;
-		print "P:$1";
 	} elsif ($_ =~ m/^:ls ?(.*)/) {
 		do_ls($1);
 	} elsif ($_ =~ m/^:e ?(.*)/) {
 		do_eval($1);
 	} else {
 		# some kind of manual entry
-		addlog("NEWRECORD\n");	# a record separator
-		addlog("M $_\n");
+		addlog("GET MANUAL\n");	# a record separator
 		if ($_ && $db->{_}{not_found}) {
 			my $root = not_found_bookdata($db->{_}{not_found},$_);
-			my $text = isbn_xml2text($root);
-			print $text;
-			adddb($root);
+			process_one_bookdata($db->{_}{not_found},$root);
 		}
+		addlog("M $_\n");
 		delete $db->{_}{not_found};
 	}
 }
@@ -299,12 +301,27 @@ sub do_one_cmdline($$) {
 sub do_repl($) {
 	my ($ua) = @_;
 
-	# prompt
-	print "> ";
-	while(<>) {
+	my $term = new Term::ReadLine 'getisbndb';
+	$term->ornaments(0);
+	my $attribs = $term->Attribs;
+	$attribs->{completion_entry_function} =
+		$attribs->{list_completion_function};
+	$attribs->{completion_word} =
+		[qw(:e :ls :prev)];
+
+	my $prompt = "> ";
+	while ( defined ($_ = $term->readline($prompt)) ) {
 		do_one_cmdline($ua,$_);
-		# prompt
-		print "> ";
+		$term->addhistory($_) if /\S/;
+
+		$prompt = "";
+		if ($db->{_}{KeyStats}{granted}) {
+			$prompt .= 'G:'.$db->{_}{KeyStats}{granted}.' ';
+		}
+		if ($db->{_}{not_found}) {
+			$prompt .= 'P:'.$db->{_}{not_found}.' ';
+		}
+		$prompt .= '> ';
 	}
 }
 
@@ -325,22 +342,17 @@ if ($option->{xml}) {
 
 	my $root = isbn_xml($xml);
 	if ($root) {
-		my $text = isbn_xml2text($root);
-		if (!defined $text) {
-			$text = "NOT FOUND\n";
-		}
-		print $text;
-		addlog("T xx\t$text");
-		adddb($root);
-		print "G:",isbndb_granted($root);
-		print "\n";
+		process_one_bookdata('xml',$root);
 	} else {
 		print "ERROR: getting isbn details\n";
 	}
+	print "G:",$db->{_}{KeyStats}{granted};
+	print "\n";
+
+	# FIXME - skips the db rename at end
 	exit;
 }
 
-my $keystats = 0;
 if ($option->{stdin}) {
 	do_repl($ua);
 } elsif (!defined($option->{isbn})) {
@@ -348,18 +360,12 @@ if ($option->{stdin}) {
 } else {
 	my $root = isbn_get($ua,$option->{key},$option->{isbn});
 	if ($root) {
-		my $text = isbn_xml2text($root);
-		if (!defined $text) {
-			$text = "NOT FOUND\n";
-		}
-		print $text;
-		addlog("T $option->{isbn}\t$text");
-		adddb($root);
-		print "G:",isbndb_granted($root);
-		print "\n";
+		process_one_bookdata($option->{isbn},$root);
 	} else {
 		print "ERROR: getting isbn details\n";
 	}
+	print "G:",$db->{_}{KeyStats}{granted};
+	print "\n";
 }
 
 if ($option->{db}) {
