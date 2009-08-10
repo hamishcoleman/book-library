@@ -302,6 +302,7 @@ sub do_repl($) {
 	my ($ua) = @_;
 
 	my $term = new Term::ReadLine 'getisbndb';
+	$db->{_}{term} = $term;
 	$term->ornaments(0);
 	my $attribs = $term->Attribs;
 	$attribs->{completion_entry_function} =
@@ -312,7 +313,7 @@ sub do_repl($) {
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
 		do_one_cmdline($ua,$_);
-		$term->addhistory($_) if /\S/;
+		#$term->addhistory($_) if /\S/;
 
 		$prompt = "";
 		if ($db->{_}{KeyStats}{granted}) {
