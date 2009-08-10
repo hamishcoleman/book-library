@@ -350,15 +350,9 @@ if ($option->{xml}) {
 	print "G:",$db->{_}{KeyStats}{granted};
 	print "\n";
 
-	# FIXME - skips the db rename at end
-	exit;
-}
-
-if ($option->{stdin}) {
+} elsif ($option->{stdin}) {
 	do_repl($ua);
-} elsif (!defined($option->{isbn})) {
-	die "Must specify isbn";
-} else {
+} elsif ($option->{isbn}) {
 	my $root = isbn_get($ua,$option->{key},$option->{isbn});
 	if ($root) {
 		process_one_bookdata($option->{isbn},$root);
@@ -367,6 +361,8 @@ if ($option->{stdin}) {
 	}
 	print "G:",$db->{_}{KeyStats}{granted};
 	print "\n";
+} else {
+	die "Must specify isbn";
 }
 
 if ($option->{db}) {
