@@ -236,7 +236,15 @@ sub not_found_bookdata($$) {
 	return $root;
 }
 
-sub do_ls {
+sub do_prev($$) {
+	my ($cmd,$args) = @_;
+
+	$db->{_}{not_found} = $args;
+}
+
+sub do_ls($$) {
+	my ($cmd,$args) = @_;
+
 	if (!$option->{db}) {
 		return;
 	}
@@ -244,10 +252,17 @@ sub do_ls {
 	print isbn_xml2text($db->{_}{isbndb});
 }
 
-sub do_eval {
-	my ($str) = @_;
+sub do_eval($$) {
+	my ($cmd,$str) = @_;
+
 	print eval $str;
 	print "\n";
+}
+
+sub do_history($$) {
+	my ($cmd,$str) = @_;
+
+	print join("\n",$db->{_}{term}->GetHistory());
 }
 
 sub process_one_bookdata($$) {
@@ -268,6 +283,7 @@ sub do_one_cmdline($$) {
 	my ($ua) = shift;
 	chomp;
 
+	# ISBN's start with numbers
 	if ($_ =~ m/^[0-9]/) {
 		# TODO - split input at first non digit
 		# TODO - check the isbn check-digit
@@ -280,22 +296,35 @@ sub do_one_cmdline($$) {
 			# TODO: check if it is a EAN13 but not bookland
 			# and ask the user to type in an ISBN
 		}
-	} elsif ($_ =~ m/^:prev (.*)/) {
-		$db->{_}{not_found} = $1;
-	} elsif ($_ =~ m/^:ls ?(.*)/) {
-		do_ls($1);
-	} elsif ($_ =~ m/^:e ?(.*)/) {
-		do_eval($1);
-	} else {
-		# some kind of manual entry
-		addlog("GET MANUAL\n");	# a record separator
-		if ($_ && $db->{_}{not_found}) {
-			my $root = not_found_bookdata($db->{_}{not_found},$_);
-			process_one_bookdata($db->{_}{not_found},$root);
-		}
-		addlog("M $_\n");
-		delete $db->{_}{not_found};
+		return;
 	}
+
+	# cmdline
+	if ($_ =~ m/^:(\w+) ?(.*)/) {
+		my %cmds = (
+			prev => \&do_prev,
+			ls => \&do_ls,
+			e => \&do_eval,
+			history => \&do_history,
+		);
+
+		if ($cmds{$1}) {
+			$cmds{$1}($1,$2);
+		} else {
+			print "Invalid command.  Use one of:\n";
+			print "\t",join(' ',sort keys %cmds),"\n";
+		}
+		return;
+	}
+
+	# some kind of manual text entry
+	addlog("GET MANUAL\n");	# a record separator
+	if ($_ && $db->{_}{not_found}) {
+		my $root = not_found_bookdata($db->{_}{not_found},$_);
+		process_one_bookdata($db->{_}{not_found},$root);
+	}
+	addlog("M $_\n");
+	delete $db->{_}{not_found};
 }
 
 sub do_repl($) {
@@ -307,8 +336,9 @@ sub do_repl($) {
 	my $attribs = $term->Attribs;
 	$attribs->{completion_entry_function} =
 		$attribs->{list_completion_function};
+	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev)];
+		[qw(:e :ls :prev :history)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
