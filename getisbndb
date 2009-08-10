@@ -482,7 +482,7 @@ sub do_one_cmdline($$) {
 	}
 
 	# cmdline
-	if ($_ =~ m/^:(\w+) ?(.*)/) {
+	if ($_ =~ m/^.(\w+) ?(.*)/) {
 		# TODO more structure for this hash, including helptext
 		my %cmds = (
 			prev => \&do_prev,
@@ -518,7 +518,7 @@ sub do_one_cmdline($$) {
 	}
 
 	if ($_) {
-		print "Enter ISBN, use :help, or set :prev\n";
+		print "Enter ISBN, use .help, or set .prev\n";
 	}
 }
 
@@ -531,7 +531,7 @@ sub do_repl($) {
 		$attribs->{list_completion_function};
 	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev :history :fake :show :replace_db :remove :tag :default_tag)];
+		[qw(.e .ls .prev .history .fake .show .replace_db .remove .tag .default_tag)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
