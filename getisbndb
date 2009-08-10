@@ -243,9 +243,69 @@ sub do_ls {
 
 sub do_eval {
 	my ($str) = @_;
-	print "eval $str\n";
 	print eval $str;
 	print "\n";
+}
+
+sub do_one_cmdline($$) {
+	my ($ua) = shift;
+	chomp;
+
+	if ($_ =~ m/^[0-9]/) {
+		# TODO - split input at first non digit
+		# TODO - check the isbn check-digit
+		print "$_\t";
+		my $root = isbn_get($ua,$option->{key},$_);
+		if ($root) {
+			my $text = isbn_xml2text($root);
+			if (!defined $text) {
+				$text = "NOT FOUND\n";
+				$db->{_}{not_found} = $_;
+			}
+			print $text;
+			addlog("T $_\t$text");
+
+			adddb($root);
+			if (defined $db->{_}{not_found}) {
+				print "P:$_ ";
+			}
+			print "G:",isbndb_granted($root);
+		} else {
+			print "ERROR: getting isbn details\n";
+			# TODO: check if it is a EAN13 but not bookland
+			# and ask the user to type in an ISBN
+		}
+	} elsif ($_ =~ m/^:prev (.*)/) {
+		$db->{_}{not_found} = $1;
+		print "P:$1";
+	} elsif ($_ =~ m/^:ls ?(.*)/) {
+		do_ls($1);
+	} elsif ($_ =~ m/^:e ?(.*)/) {
+		do_eval($1);
+	} else {
+		# some kind of manual entry
+		addlog("NEWRECORD\n");	# a record separator
+		addlog("M $_\n");
+		if ($_ && $db->{_}{not_found}) {
+			my $root = not_found_bookdata($db->{_}{not_found},$_);
+			my $text = isbn_xml2text($root);
+			print $text;
+			adddb($root);
+		}
+		delete $db->{_}{not_found};
+	}
+}
+
+sub do_repl($) {
+	my ($ua) = @_;
+
+	# prompt
+	print "> ";
+	while(<>) {
+		do_one_cmdline($ua,$_);
+		# prompt
+		print "> ";
+	}
 }
 
 if ( !defined($option->{key})){
@@ -282,58 +342,7 @@ if ($option->{xml}) {
 
 my $keystats = 0;
 if ($option->{stdin}) {
-	# prompt
-	print "> ";
-	my $prev_not_found;
-	while(<>) {
-		chomp;
-
-		if ($_ =~ m/^[0-9]/) {
-			# TODO - split input at first non digit
-			# TODO - check the isbn check-digit
-			print "$_\t";
-			my $root = isbn_get($ua,$option->{key},$_);
-			if ($root) {
-				my $text = isbn_xml2text($root);
-				if (!defined $text) {
-					$text = "NOT FOUND\n";
-					$prev_not_found = $_;
-				}
-				print $text;
-				addlog("T $_\t$text");
-
-				adddb($root);
-				if (defined $prev_not_found) {
-					print "P:$_ ";
-				}
-				print "G:",isbndb_granted($root);
-			} else {
-				print "ERROR: getting isbn details\n";
-				# TODO: check if it is a EAN13 but not bookland
-				# and ask the user to type in an ISBN
-			}
-		} elsif ($_ =~ m/^:prev (.*)/) {
-			$prev_not_found = $1;
-			print "P:$1";
-		} elsif ($_ =~ m/^:ls ?(.*)/) {
-			do_ls($1);
-		} elsif ($_ =~ m/^:e ?(.*)/) {
-			do_eval($1);
-		} else {
-			# some kind of manual entry
-			addlog("NEWRECORD\n");	# a record separator
-			addlog("M $_\n");
-			if ($_ && $prev_not_found) {
-				my $root = not_found_bookdata($prev_not_found,$_);
-				my $text = isbn_xml2text($root);
-				print $text;
-				adddb($root);
-			}
-			undef $prev_not_found;
-		}
-		# prompt
-		print "> ";
-	}
+	do_repl($ua);
 } elsif (!defined($option->{isbn})) {
 	die "Must specify isbn";
 } else {
