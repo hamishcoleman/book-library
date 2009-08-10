@@ -329,6 +329,8 @@ sub process_one_bookdata($$) {
 	if (!defined $text) {
 		$text = "NOT FOUND\n";
 		$db->{_}{not_found} = $_;
+	} else {
+		delete $db->{_}{not_found};
 	}
 	print $text;
 	addlog("T $search\t$text");
