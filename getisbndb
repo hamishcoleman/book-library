@@ -22,6 +22,7 @@ use Term::ReadLine;
 
 
 # FIXME - globals
+$term = new Term::ReadLine 'getisbndb';
 my $parser = XML::LibXML->new();
 my $db={};
 
@@ -274,7 +275,7 @@ sub do_eval($$) {
 sub do_history($$) {
 	my ($cmd,$str) = @_;
 
-	print join("\n",$db->{_}{term}->GetHistory());
+	print join("\n",$term->GetHistory());
 }
 
 sub do_fake($$) {
@@ -350,8 +351,6 @@ sub do_one_cmdline($$) {
 sub do_repl($) {
 	my ($ua) = @_;
 
-	my $term = new Term::ReadLine 'getisbndb';
-	$db->{_}{term} = $term;
 	$term->ornaments(0);
 	my $attribs = $term->Attribs;
 	$attribs->{completion_entry_function} =
