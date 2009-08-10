@@ -55,6 +55,7 @@ do_options($option,
 		"stdin",
 		"log=s",
 		"db=s",
+		"deftag=s",
 );
 
 #
@@ -131,32 +132,40 @@ sub isbn_get($$$) {
 	return isbn_xml($res->content);
 }
 
+sub isbn_xml2text1($) {
+	my ($node) = @_;
+	my $res;
+
+	my $author;
+	for my $i ($node->getElementsByTagName('AuthorsText')) {
+		if ($author) {
+			$author.=', ';
+		}
+		$author.=$i->textContent();
+	}
+	my $title;
+	for my $i ($node->getElementsByTagName('Title')) {
+		if ($title) {
+			$title.=', ';
+		}
+		$title.=$i->textContent();
+	}
+
+	$res.=sprintf("%-14s %-21s %s\n",
+		$node->getAttribute('isbn').';',
+		$author.';', $title
+	);
+
+	return $res;
+}
+
 sub isbn_xml2text($) {
 	my ($root) = @_;
 	my $res;
 
 	for my $node ($root->getElementsByTagName('BookData')) {
-		my $author;
-		for my $i ($node->getElementsByTagName('AuthorsText')) {
-			if ($author) {
-				$author.=', ';
-			}
-			$author.=$i->textContent();
-		}
-		my $title;
-		for my $i ($node->getElementsByTagName('Title')) {
-			if ($title) {
-				$title.=', ';
-			}
-			$title.=$i->textContent();
-		}
-
-		$res.=sprintf("%-14s %-21s %s\n",
-			$node->getAttribute('isbn').';',
-			$author.';', $title
-		);
+		$res.=isbn_xml2text1($node);
 	}
-
 	return $res;
 }
 
@@ -188,7 +197,8 @@ sub db_index_bookdata($) {
 	my ($node) = @_;
 
 	$db->{book_id}{$node->getAttribute('book_id')} = $node;
-	$db->{isbn}{$node->getAttribute('isbn')} = $node;
+	my $isbn = $node->getAttribute('isbn');
+	$db->{isbn}{$isbn} = $node;
 
 	my $author;
 	for my $i ($node->getElementsByTagName('AuthorsText')) {
@@ -198,6 +208,11 @@ sub db_index_bookdata($) {
 		$author.=$i->textContent();
 	}
 	push @{$db->{author}{$author}},$node;
+
+	my $tag = $node->getAttribute('tag');
+	if ($tag) {
+		$db->{tag}{$tag}{$isbn}=$node;
+	}
 }
 
 sub db_load($) {
@@ -246,7 +261,12 @@ sub adddb {
 	}
 
 	my ($root) = @_;
+
 	for my $node ($root->getElementsByTagName('BookData')) {
+		if ($option->{deftag} && !$node->getAttribute('tag')) {
+			$node->setAttribute('tag',$option->{deftag});
+		}
+
 		$db->{_}{isbndb}->appendChild($node);
 		db_index_bookdata($node);
 	}
@@ -309,7 +329,13 @@ sub do_history($$) {
 sub do_fake($$) {
 	my ($cmd,$str) = @_;
 
-	do_prev($cmd,db_new_fake_isbn());
+	if ($str) {
+		# any args are used to build the new book
+		my $root = not_found_bookdata(db_new_fake_isbn(),$str);
+		process_one_bookdata($str,$root);
+	} else {
+		do_prev($cmd,db_new_fake_isbn());
+	}
 }
 
 sub do_show($$) {
@@ -345,6 +371,51 @@ sub do_replace_db($$) {
 		$option->{db} = $str;
 	}
 	db_load($option->{db});
+}
+
+sub do_tag($$) {
+	my ($cmd) = shift;
+	$_ = shift;
+
+	my @list = split;
+	my $tag = shift @list;
+
+	# no tag means show tags
+	if (!$tag) {
+		print(join("\n",sort(keys(%{$db->{tag}}))),"\n");
+		return;
+	}
+
+	# no list means show tagged books
+	if (!scalar @list) {
+		for my $node ($db->{_}{isbndb}->getElementsByTagName('BookData')) {
+			if (($node->getAttribute('tag')||'') =~ $tag) {
+				print isbn_xml2text1($node);
+			}
+		}
+		return;
+	}
+
+	print "Tagging books\n";
+	for my $i (@list) {
+		if ($db->{isbn}{$i}) {
+			my $oldtag = $db->{isbn}{$i}->getAttribute('tag');
+			if ($oldtag) {
+				delete $db->{tag}{$oldtag}{$i};
+			}
+
+			$db->{isbn}{$i}->setAttribute('tag',$tag);
+			$db->{tag}{$tag}{$i}=$db->{isbn}{$i};
+		} else {
+			print "$i not found\n";
+		}
+	}
+}
+
+sub do_default_tag($$) {
+	my ($cmd,$tag) = @_;
+
+	$option->{deftag}=$tag;
 }
 
 sub process_one_bookdata($$) {
@@ -395,6 +466,8 @@ sub do_one_cmdline($$) {
 			show => \&do_show,
 			replace_db => \&do_replace_db,
 			remove => \&do_remove,
+			tag => \&do_tag,
+			default_tag => \&do_default_tag,
 		);
 
 		if ($cmds{$1}) {
@@ -431,7 +504,7 @@ sub do_repl($) {
 		$attribs->{list_completion_function};
 	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev :history :fake :show :replace_db :remove)];
+		[qw(:e :ls :prev :history :fake :show :replace_db :remove :tag :default_tag)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
