@@ -224,8 +224,12 @@ sub tag_book($$) {
 		delete $db->{tag}{$oldtag}{$isbn};
 	}
 
-	$node->setAttribute('tag',$tag);
-	$db->{tag}{$tag}{$isbn}=$node;
+	if ($tag) {
+		$node->setAttribute('tag',$tag);
+		$db->{tag}{$tag}{$isbn}=$node;
+	} else {
+		$node->removeAttribute('tag');
+	}
 }
 
 sub db_load($) {
@@ -439,6 +443,11 @@ sub do_tag($$) {
 			}
 		}
 		return;
+	}
+
+	# allow removal of tags
+	if ($tag eq "''") {
+		$tag='';
 	}
 
 	print "Tagging books\n";
