@@ -150,10 +150,11 @@ sub isbn_xml2text($) {
 			}
 			$title.=$i->textContent();
 		}
-		$res.=$node->getAttribute('isbn')."\t";
-		$res.=$author.";\t";
-		$res.=$title;
-		$res.="\n";
+
+		$res.=sprintf("%-14s %-21s %s\n",
+			$node->getAttribute('isbn').';',
+			$author.';', $title
+		);
 	}
 
 	return $res;
