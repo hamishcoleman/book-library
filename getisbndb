@@ -279,13 +279,19 @@ sub adddb {
 sub not_found_bookdata($$) {
 	my ($isbn,$text) = @_;
 
+	my ($author,$title) = split(/;/,$text);
+	if (!$title) {
+		$title = $author;
+		$author = 'UNKNOWN';
+	}
+
 	my $root = XML::LibXML::Element->new('ISBNdb');
 	my $node = XML::LibXML::Element->new('BookData');
 	$root->appendChild($node);
 	$node->setAttribute('book_id','unkid'.$isbn);
 	$node->setAttribute('isbn',$isbn);
-	$node->appendTextChild('Title',$text);
-	$node->appendTextChild('AuthorsText','UNKNOWN');
+	$node->appendTextChild('Title',$title);
+	$node->appendTextChild('AuthorsText',$author);
 	$node->appendTextChild('Summary','');
 	$node->appendTextChild('Details','');
 	$node->appendTextChild('Prices','');
