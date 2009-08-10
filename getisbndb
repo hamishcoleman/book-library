@@ -176,7 +176,7 @@ sub db_load($) {
 	if (!defined $fh) {
 		die "could not open $filename $!\n";
 	}
-	$db->{_}{doc} $parser->parse_fh($fh);
+	$db->{_}{doc} = $parser->parse_fh($fh);
 	# TODO - warn / create an empty document on fail
 	$db->{_}{isbndb} = $db->{_}{doc}->getDocumentElement();
 }
