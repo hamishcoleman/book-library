@@ -339,13 +339,19 @@ sub do_one_cmdline($$) {
 	}
 
 	# some kind of manual text entry
-	addlog("GET MANUAL\n");	# a record separator
 	if ($_ && $db->{_}{not_found}) {
+		addlog("GET MANUAL\n");	# a record separator
 		my $root = not_found_bookdata($db->{_}{not_found},$_);
 		process_one_bookdata($db->{_}{not_found},$root);
+		addlog("M $_\n");
+		delete $db->{_}{not_found};
+
+		return;
 	}
-	addlog("M $_\n");
-	delete $db->{_}{not_found};
+
+	if ($_) {
+		print "Enter ISBN, use :help, or set :prev\n";
+	}
 }
 
 sub do_repl($) {
