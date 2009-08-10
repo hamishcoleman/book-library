@@ -388,8 +388,22 @@ sub do_remove($$) {
 
 	if ($db->{isbn}{$isbn}) {
 		$db->{isbn}{$isbn}->unbindNode();
+		delete $db->{isbn}{$isbn};
+	} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
+		my $node = $db->{_}{last_added};
+		$node->unbindNode();
+		delete $db->{isbn}{$node->getAttribute('isbn')};
 	} else {
 		print "$isbn not found\n";
+		return
+	}
+
+	# perform a full database search and reindex to reconnect any
+	# duplicate entries
+	for my $node ($db->{_}{isbndb}->getElementsByTagName('BookData')) {
+		if ($node->getAttribute('isbn')||'' eq $isbn) {
+			db_index_bookdata($node);
+		}
 	}
 }
 
