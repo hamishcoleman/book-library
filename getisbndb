@@ -130,6 +130,17 @@ sub isbn_xml2text($) {
 	return $res;
 }
 
+# <KeyStats granted="22" access_key="CHANGEME" requests="22" limit="500" />
+sub isbndb_granted {
+	my ($root) = @_;
+	my $res;
+
+	for my $node ($root->getElementsByTagName('KeyStats')) {
+		$res = $node->getAttribute('granted');
+	}
+	return $res;
+}
+
 sub addlog {
 	if (!$option->{log}) {
 		return;
@@ -171,13 +182,20 @@ sub not_found_bookdata($$) {
 	$node->setAttribute('isbn',$isbn);
 	$node->appendTextChild('Title',$text);
 	$node->appendTextChild('AuthorsText','UNKNOWN');
-	$node->appendTextChild('Summary','This Book was not found in isbndb.com database and has been automatically created from text');
+	$node->appendTextChild('Summary','');
 	$node->appendTextChild('Details','');
 	$node->appendTextChild('Prices','');
 	$node->appendTextChild('Authors','');
 
-
 	return $root;
+}
+
+sub do_ls {
+	if (!$option->{db}) {
+		return;
+	}
+
+	print isbn_xml2text($option->{db_isbndb});
 }
 
 if ( !defined($option->{key})){
@@ -211,6 +229,7 @@ if ($option->{xml}) {
 	exit;
 }
 
+my $keystats = 0;
 if ($option->{stdin}) {
 	# prompt
 	print "> ";
@@ -234,17 +253,27 @@ if ($option->{stdin}) {
 				addlog($res->content,"\n");
 				addlog("T $_\t$text");
 				adddb($root);
+				if (defined $prev_not_found) {
+					print "P:$_ ";
+				}
+				print "G:",isbndb_granted($root);
 			} else {
 				print "ERROR: getting isbn details\n";
 			}
 		} elsif ($_ =~ m/^:prev (.*)/) {
 			$prev_not_found = $1;
+			print "P:$1";
+		} elsif ($_ =~ m/^:ls ?(.*)/) {
+			do_ls($1);
 		} else {
 			# some kind of manual entry
 			addlog("NEWRECORD\n");	# a record separator
 			addlog("M $_\n");
 			if ($_ && $prev_not_found) {
-				adddb(not_found_bookdata($prev_not_found,$_));
+				my $root = not_found_bookdata($prev_not_found,$_);
+				my $text = isbn_xml2text($root);
+				print $text;
+				adddb($root);
 			}
 			undef $prev_not_found;
 		}
