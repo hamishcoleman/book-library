@@ -292,8 +292,12 @@ sub do_ls($$) {
 sub do_eval($$) {
 	my ($cmd,$str) = @_;
 
-	print eval $str;
-	print "\n";
+	my $res = eval $str;
+	if ($@) {
+		warn $@;
+	} else {
+		print $res,"\n";
+	}
 }
 
 sub do_history($$) {
