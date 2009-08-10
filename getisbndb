@@ -326,6 +326,16 @@ sub do_show($$) {
 	}
 }
 
+sub do_remove($$) {
+	my ($cmd,$isbn) = @_;
+
+	if ($db->{isbn}{$isbn}) {
+		$db->{isbn}{$isbn}->unbindNode();
+	} else {
+		print "$isbn not found\n";
+	}
+}
+
 #
 # Load and replace current database
 sub do_replace_db($$) {
@@ -384,6 +394,7 @@ sub do_one_cmdline($$) {
 			fake => \&do_fake,
 			show => \&do_show,
 			replace_db => \&do_replace_db,
+			remove => \&do_remove,
 		);
 
 		if ($cmds{$1}) {
@@ -420,7 +431,7 @@ sub do_repl($) {
 		$attribs->{list_completion_function};
 	# FIXME - calculate this list from the cmdline hash table
 	$attribs->{completion_word} =
-		[qw(:e :ls :prev :history :fake :show :replace_db)];
+		[qw(:e :ls :prev :history :fake :show :replace_db :remove)];
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
