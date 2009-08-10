@@ -169,6 +169,13 @@ sub addlog {
 	$option->{logfh}->print(@_);
 }
 
+sub db_index_bookdata($) {
+	my ($node) = @_;
+
+	$db->{book_id}{$node->getAttribute('book_id')} = $node;
+	$db->{isbn}{$node->getAttribute('isbn')} = $node;
+}
+
 sub db_load($) {
 	my ($filename) = @_;
 
@@ -179,6 +186,10 @@ sub db_load($) {
 	$db->{_}{doc} = $parser->parse_fh($fh);
 	# TODO - warn / create an empty document on fail
 	$db->{_}{isbndb} = $db->{_}{doc}->getDocumentElement();
+
+	for my $node ($db->{_}{doc}->getElementsByTagName('BookData')) {
+		db_index_bookdata($node);
+	}
 }
 
 sub db_save() {
@@ -197,6 +208,7 @@ sub adddb {
 	my ($root) = @_;
 	for my $node ($root->getElementsByTagName('BookData')) {
 		$db->{_}{isbndb}->appendChild($node);
+		db_index_bookdata($node);
 	}
 
 	# paranoid write
@@ -227,6 +239,13 @@ sub do_ls {
 	}
 
 	print isbn_xml2text($db->{_}{isbndb});
+}
+
+sub do_eval {
+	my ($str) = @_;
+	print "eval $str\n";
+	print eval $str;
+	print "\n";
 }
 
 if ( !defined($option->{key})){
@@ -271,6 +290,7 @@ if ($option->{stdin}) {
 
 		if ($_ =~ m/^[0-9]/) {
 			# TODO - split input at first non digit
+			# TODO - check the isbn check-digit
 			print "$_\t";
 			my $root = isbn_get($ua,$option->{key},$_);
 			if ($root) {
@@ -289,12 +309,16 @@ if ($option->{stdin}) {
 				print "G:",isbndb_granted($root);
 			} else {
 				print "ERROR: getting isbn details\n";
+				# TODO: check if it is a EAN13 but not bookland
+				# and ask the user to type in an ISBN
 			}
 		} elsif ($_ =~ m/^:prev (.*)/) {
 			$prev_not_found = $1;
 			print "P:$1";
 		} elsif ($_ =~ m/^:ls ?(.*)/) {
 			do_ls($1);
+		} elsif ($_ =~ m/^:e ?(.*)/) {
+			do_eval($1);
 		} else {
 			# some kind of manual entry
 			addlog("NEWRECORD\n");	# a record separator
