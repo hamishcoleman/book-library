@@ -113,7 +113,7 @@ sub isbn_get($$$) {
 
 	my $url = "http://isbndb.com/api/books.xml?access_key=$key&results=details,texts,prices,authors,keystats&index1=isbn&value1=$isbn";
 
-	addlog('GET ',$url);
+	addlog('GET ',$url,"\n");
 	my $req = HTTP::Request->new(GET => $url);
 	my $res = $ua->request($req);
 	dump_res('get',$res);
@@ -169,6 +169,26 @@ sub addlog {
 	$option->{logfh}->print(@_);
 }
 
+sub db_load($) {
+	my ($filename) = @_;
+
+	my $fh = new FileHandle $filename,"r";
+	if (!defined $fh) {
+		die "could not open $filename $!\n";
+	}
+	$db->{_}{doc} $parser->parse_fh($fh);
+	# TODO - warn / create an empty document on fail
+	$db->{_}{isbndb} = $db->{_}{doc}->getDocumentElement();
+}
+
+sub db_save() {
+	my $fh = new FileHandle $option->{db}.'.new','w';
+	if (!defined $fh) {
+		die "could not open $option->{db}.new $!\n";
+	}
+	$db->{_}{doc}->toFH($fh,1);
+}
+
 sub adddb {
 	if (!$option->{db}) {
 		return;
@@ -176,15 +196,11 @@ sub adddb {
 
 	my ($root) = @_;
 	for my $node ($root->getElementsByTagName('BookData')) {
-		$option->{db_isbndb}->appendChild($node);
+		$db->{_}{isbndb}->appendChild($node);
 	}
 
 	# paranoid write
-	my $fh = new FileHandle $option->{db}.'.new','w';
-	if (!defined $fh) {
-		die "could not open $option->{db}.new $!\n";
-	}
-	$option->{db_doc}->toFH($fh,1);
+	db_save();
 }
 
 sub not_found_bookdata($$) {
@@ -210,7 +226,7 @@ sub do_ls {
 		return;
 	}
 
-	print isbn_xml2text($option->{db_isbndb});
+	print isbn_xml2text($db->{_}{isbndb});
 }
 
 if ( !defined($option->{key})){
@@ -218,29 +234,30 @@ if ( !defined($option->{key})){
 }
 
 if ($option->{db}) {
-	my $fh = new FileHandle $option->{db},"r";
-	if (!defined $fh) {
-		die "could not open $option->{db} $!\n";
-	}
-	$option->{db_doc} = $parser->parse_fh($fh);
-	# TODO - warn / create an empty document on fail
-	$option->{db_isbndb} = $option->{db_doc}->getDocumentElement();
+	db_load($option->{db});
 }
 
 my $ua = http_setup();
 
 if ($option->{xml}) {
 	my $xml = $option->{xml};
-	my $root = isbn_xml($xml);
-	my $text = isbn_xml2text($root);
-	if (!defined $text) {
-		$text = "NOT FOUND\n";
-	}
-	print $text;
-	addlog("NEWRECORD\n");	# a record separator
+	addlog("GET from string\n");	# a record separator
 	addlog($xml,"\n");
-	addlog("T xx\t$text");
-	adddb($root);
+
+	my $root = isbn_xml($xml);
+	if ($root) {
+		my $text = isbn_xml2text($root);
+		if (!defined $text) {
+			$text = "NOT FOUND\n";
+		}
+		print $text;
+		addlog("T xx\t$text");
+		adddb($root);
+		print "G:",isbndb_granted($root);
+		print "\n";
+	} else {
+		print "ERROR: getting isbn details\n";
+	}
 	exit;
 }
 
@@ -303,7 +320,7 @@ if ($option->{stdin}) {
 			$text = "NOT FOUND\n";
 		}
 		print $text;
-		addlog("T $_\t$text");
+		addlog("T $option->{isbn}\t$text");
 		adddb($root);
 		print "G:",isbndb_granted($root);
 		print "\n";
