@@ -317,11 +317,105 @@ sub not_found_bookdata($$) {
 	return $root;
 }
 
+# FIXME globals
+my $cmds = {};
+
+sub register_help($$) {
+	my ($topic,$help) = @_;
+
+	$cmds->{help}{$topic}=$help;
+}
+register_help('prompt','
+ The command line prompt can contain several pieces of information.
+ If there is a "prev" ISBN set then the prompt will contain a "P:"
+ followed by the setting of the prev value.  If the number of ISBNdb.com
+ queries granted is known then the prompt will contain a "G:" followed
+ by the number.
+
+Eg:
+ G:16 P:9780099332107 > _
+
+ See Also: manual, .prev
+');
+register_help('manual','
+ When a ISBN lookup has failed, it sets the "prev" value to the ISBN
+ that could not be found.  This "prev" value can also be set using the
+ ".prev" and ".fake" commands and the current value will be seen on
+ the prompt.
+
+ Once a "prev" value is set, a new manual database entry can be created
+ simply by typing the details in at the prompt.
+
+ The details can be free-form text, however it is expected that they
+ contain at least the Author and Title of the book.  If there is a
+ semi-colon (";") in the text, this is used to indicate that the Author
+ is on the left of the semi-colon.  Any remaining text is placed in the
+ Title field, however this is just a convinience and the text may include
+ notes or information other than the Title
+
+Eg:
+ Smith, John; Apples are nice
+
+ See Also: .prev, .fake
+');
+
+sub register_cmd($$$) {
+	my ($cmd,$func,$desc) = @_;
+
+	$cmds->{cmd}{$cmd}{func}=$func;
+	$cmds->{cmd}{$cmd}{desc}=$desc;
+}
+
+sub do_help($$) {
+	my ($cmd,$topic) = @_;
+
+	if (!$topic) {
+		# print generic help
+		print "\n";
+		print "List of commands:\n";
+		for my $i (sort keys %{$cmds->{cmd}}) {
+			printf(" .%-13s %s\n",
+				$i,
+				$cmds->{cmd}{$i}{desc}
+			);
+		}
+		print "\n";
+		print "Use '.help topics' for a full list of all available help topics\n\n";
+		return;
+	}
+
+	if ($topic eq 'topics') {
+		# print list of available topics
+		print "Avaliable help topics:\n\t";
+		print join(', ',sort(keys(%{$cmds->{help}}))),"\n";
+		return;
+	}
+
+	if ($cmds->{help}{$topic}) {
+		print $cmds->{help}{$topic};
+		return;
+	}
+
+	print "Help Topic not available\n";
+}
+register_cmd('help',\&do_help,'Provide access to help screens');
+
 sub do_prev($$) {
 	my ($cmd,$args) = @_;
 
 	$db->{_}{not_found} = $args;
 }
+register_cmd('prev',\&do_prev,'Set the isbn to use for the next dummy entry');
+register_help('.prev','
+ Usage: .prev <string>
+
+ This stores the string that will be used as the ISBN for the next
+ manually entered book name.  Normally, searching for an ISBN which is
+ not found will automatically set this, however it may be useful to
+ manually set.
+
+ See Also: .fake, prompt, manual
+');
 
 sub do_ls($$) {
 	my ($cmd,$args) = @_;
@@ -332,6 +426,21 @@ sub do_ls($$) {
 
 	print isbn_xml2text($db->{_}{isbndb});
 }
+register_cmd('ls',\&do_ls,'Show current list of books');
+register_help('.ls','
+ Usage: .ls
+
+ This shows the entire current list of books.  The output is sorted in
+ the order that the books were entered.
+
+Eg:
+
+0552150738;    Dan Brown;            Angels and demons
+0099496100;    Orson Scott Card;     Enders game
+0099503204;    Orson Scott Card;     Speaker for the Dead
+
+ See Also: 
+');
 
 sub do_eval($$) {
 	my ($cmd,$str) = @_;
@@ -343,12 +452,26 @@ sub do_eval($$) {
 		print $res,"\n";
 	}
 }
+register_cmd('eval',\&do_eval,'Debug program using perl statements');
+register_help('.eval','
+ Usage: .eval <perl statement>
+
+ This command is used to debug the internals of the running program
+ using native perl commands.  It can also be used to extract adhoc reports
+ from the database.
+
+Eg:
+ .eval Dumper($db);
+
+ See Also: 
+');
 
 sub do_history($$) {
 	my ($cmd,$str) = @_;
 
 	print join("\n",$term->GetHistory());
 }
+register_cmd('history',\&do_history,'Show command line history');
 
 sub do_fake($$) {
 	my ($cmd,$str) = @_;
@@ -361,6 +484,22 @@ sub do_fake($$) {
 		do_prev($cmd,db_new_fake_isbn());
 	}
 }
+register_cmd('fake',\&do_fake,'Create a unique fake isbn and maybe create a new entry using it');
+register_help('.fake','
+ Usage: .fake
+ Usage: .fake <string>
+
+ This command will generate a new unique ISBN to be used for books
+ that do not have any ISBN.  In the case with no parameters the ISBN is
+ stored ready for the next manual book name entry to use.  If a string is
+ provided to the command, then that is used straight away as the manual
+ book name - as if it was manually typed on the next line
+
+Eg:
+ .fake Smith, John; Apples are Nice
+
+ See Also: manual
+');
 
 sub do_show($$) {
 	my ($cmd,$str) = @_;
@@ -386,6 +525,23 @@ sub do_show($$) {
 		}
 	}
 }
+register_cmd('show',\&do_show,'Show the raw XML for an entry');
+register_help('.show','
+ Usage: .show <list of ISBNs>
+ Usage: .show
+
+ This command will dump out the raw XML contained in the database for
+ a given list of ISBNs.  If it is used without any list, it will simply
+ show a list of the ISBNs available.
+
+ This command also accepts "last" as the ISBN, in which case it will show
+ the most recently added entry.
+
+Eg:
+ .show 0749301317 9780099332107
+
+ See Also:
+');
 
 sub do_remove($$) {
 	my ($cmd,$isbn) = @_;
@@ -410,6 +566,20 @@ sub do_remove($$) {
 		}
 	}
 }
+register_cmd('remove',\&do_remove,'Remove an entry');
+register_help('.remove','
+ Usage: .remove <ISBN>
+
+ This command will remove an ISBN from the database
+
+ This command also accepts "last" as the ISBN, in which case it will
+ remove the most recently added entry.
+
+ WARNING: This is permanant and cannot be undone.  If you accidentally
+ remove an entry you will need to restore that entry from a backup
+
+ See Also:
+');
 
 #
 # Load and replace current database
@@ -421,6 +591,19 @@ sub do_replace_db($$) {
 	}
 	db_load($option->{db});
 }
+register_cmd('replace_db',\&do_replace_db,'Load a new database, replacing the current one');
+register_help('.replace_db','
+ Usage: .replace_db
+ Usage: .replace_db <filename>
+
+ This will replace the entire current database with a new one loaded
+ from disk.  If there is no filename provided, this will reload the
+ original file, otherwise it changes to the specified file.
+
+ WARNING: This will wipe out any unsaved changes
+
+ See Also:
+');
 
 sub do_tag($$) {
 	my ($cmd) = shift;
@@ -461,12 +644,42 @@ sub do_tag($$) {
 		}
 	}
 }
+register_cmd('tag',\&do_tag,'Set or show tags on entries');
+register_help('.tag','
+ Usage: .tag
+ Usage: .tag <tag>
+ Usage: .tag <tag> <list of ISBNs>
+
+ This command is used for showing and managing tags.  When run with no
+ parameters, it will show a list of all currently used tags.  When run
+ with a tag name, it will list the books that have been tagged with
+ that tag.  When run with a tag name and a list of ISBNs, it will tag
+ all those ISBNs with the given tag.
+
+ This command also accepts "last" as the ISBN, in which case it will
+ tag the most recently added entry.
+
+Eg:
+ .tag chuck
+ .tag shelf4 0330231669 058604356X
+
+ See Also: .default_tag
+');
 
 sub do_default_tag($$) {
 	my ($cmd,$tag) = @_;
 
 	$option->{deftag}=$tag;
 }
+register_cmd('default_tag',\&do_default_tag,'Set the default tag for new entries');
+register_help('.default_tag','
+ Usage: .default_tag <tag>
+
+ This command sets the default tag to set on all new entries.
+
+
+ See Also: .tag
+');
 
 sub process_one_bookdata($$) {
 	my ($search,$root) = @_;
@@ -506,26 +719,11 @@ sub do_one_cmdline($$) {
 
 	# cmdline
 	if ($_ =~ m/^\.(\w+) ?(.*)/) {
-		# TODO more structure for this hash, including helptext
-		my %cmds = (
-			prev => \&do_prev,
-			ls => \&do_ls,
-			e => \&do_eval,
-			history => \&do_history,
-			fake => \&do_fake,
-			show => \&do_show,
-			replace_db => \&do_replace_db,
-			remove => \&do_remove,
-			tag => \&do_tag,
-			default_tag => \&do_default_tag,
-		);
-
-		if ($cmds{$1}) {
-			$cmds{$1}($1,$2);
-		} else {
-			print "Invalid command.  Use one of:\n";
-			print "\t",join(' ',sort keys %cmds),"\n";
+		if ($cmds->{cmd}{$1}){
+			$cmds->{cmd}{$1}{func}($1,$2);
+			return;
 		}
+		print "Invalid Command.  Use '.help' for more help\n";
 		return;
 	}
 
@@ -541,7 +739,7 @@ sub do_one_cmdline($$) {
 	}
 
 	if ($_) {
-		print "Enter ISBN, use .help, or set .prev\n";
+		print "Enter ISBN or use '.help' for more help\n";
 	}
 }
 
@@ -552,9 +750,10 @@ sub do_repl($) {
 	my $attribs = $term->Attribs;
 	$attribs->{completion_entry_function} =
 		$attribs->{list_completion_function};
-	# FIXME - calculate this list from the cmdline hash table
-	$attribs->{completion_word} =
-		[qw(.e .ls .prev .history .fake .show .replace_db .remove .tag .default_tag)];
+
+	for my $i (keys %{$cmds->{cmd}}) {
+		push @{$attribs->{completion_word}}, '.'.$i;
+	}
 
 	my $prompt = "> ";
 	while ( defined ($_ = $term->readline($prompt)) ) {
