@@ -848,11 +848,15 @@ sub do_one_cmdline($$) {
 	# ISBN's start with numbers
 	if ($_ =~ m/^[0-9]/) {
 
-		# Is this only the ISBN and nothing else?
-		# then try and validate it and beep if there is an error
-		if ($_ =~ m/^[0-9]+[xX]?$/ && !($_ = validate_isbn($_))) {
+
+		# remove spaces
+		s/ +//g;
+		
+		# try and validate it and beep if there is an error
+		if (!($_ = validate_isbn($_))) {
 			# TODO - should I remove the warns from
 			# validate_isbn and output the message here?
+			# TODO - add a method of forcing text to validate
 			print '';
 			return;
 		}
