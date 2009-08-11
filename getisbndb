@@ -327,6 +327,9 @@ sub not_found_bookdata($$) {
 	if (!$title) {
 		$title = $author;
 		$author = 'UNKNOWN';
+	} else {
+		# even if we think we know it, make it easily visible
+		$author = 'UNKNOWN '.$author;
 	}
 
 	my $root = XML::LibXML::Element->new('ISBNdb');
