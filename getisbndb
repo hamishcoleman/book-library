@@ -505,7 +505,7 @@ sub do_one_cmdline($$) {
 	}
 
 	# cmdline
-	if ($_ =~ m/^.(\w+) ?(.*)/) {
+	if ($_ =~ m/^\.(\w+) ?(.*)/) {
 		# TODO more structure for this hash, including helptext
 		my %cmds = (
 			prev => \&do_prev,
