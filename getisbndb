@@ -96,6 +96,9 @@ sub http_setup() {
 	return $ua;
 }
 
+#
+# Given a well formed XML text string, return the document
+#
 sub isbn_xml($) {
 	my ($text) = @_;
 	my $res;
@@ -132,6 +135,9 @@ sub isbn_get($$$) {
 	return isbn_xml($res->content);
 }
 
+#
+# Given one BookData node, return a string summarising the book
+#
 sub isbn_xml2text1($) {
 	my ($node) = @_;
 	my $res;
@@ -159,6 +165,10 @@ sub isbn_xml2text1($) {
 	return $res;
 }
 
+#
+# Given a document containing BookData nodes, return a string with a one line
+# summary for each node
+#
 sub isbn_xml2text($) {
 	my ($root) = @_;
 	my $res;
@@ -169,7 +179,12 @@ sub isbn_xml2text($) {
 	return $res;
 }
 
+#
+# Given an XML response from ISBNDB, extract the key usage stats and update
+# our local cache of this
+#
 # <KeyStats granted="22" access_key="CHANGEME" requests="22" limit="500" />
+#
 sub update_keystats($) {
 	my ($root) = @_;
 
@@ -180,6 +195,12 @@ sub update_keystats($) {
 	}
 }
 
+#
+# Add an entry into the running logfile (if enabled)
+#
+# Note: this function has been depricated and may not log much or format this
+# log very well for the commandline processing mode
+#
 sub addlog {
 	if (!$option->{log}) {
 		return;
@@ -193,6 +214,9 @@ sub addlog {
 	$option->{logfh}->print(@_);
 }
 
+#
+# Update the indexes with a given BookData node
+#
 sub db_index_bookdata($) {
 	my ($node) = @_;
 
@@ -215,6 +239,9 @@ sub db_index_bookdata($) {
 	}
 }
 
+#
+# Add a tag to a node, updating any index details as needed
+#
 sub tag_book($$) {
 	my ($node,$tag) = @_;
 
@@ -687,6 +714,7 @@ sub process_one_bookdata($$) {
 	my $text = isbn_xml2text($root);
 	if (!defined $text) {
 		$text = "NOT FOUND\n";
+		# TODO - check that $text is a valid ISBN before setting it
 		$db->{_}{not_found} = $_;
 	} else {
 		delete $db->{_}{not_found};
