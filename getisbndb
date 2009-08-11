@@ -344,6 +344,117 @@ sub not_found_bookdata($$) {
 	return $root;
 }
 
+sub EAN13_makecheckdigit($) {
+	my ($upc) = @_;
+
+	if (length($upc)!=12) {
+		# EAN-13 without check digit is 12 chars long
+		return undef;
+	}
+
+	my $csum=0;
+	while ($upc) {
+		$csum+= (chop $upc)*3;
+		$csum+=  chop $upc;
+	}
+	my $modulus = 10 - ($csum%10);
+	if ($modulus == 10) {
+		return 0;
+	} else {
+		return $modulus;
+	}
+}
+
+sub EAN13_checkcheckdigit($) {
+	my ($upc) = @_;
+
+	if (length($upc)!=13) {
+		return undef;
+	}
+
+	my $check = chop($upc);
+	return ($check == EAN13_makecheckdigit($upc));
+}
+
+sub ISBN_makecheckdigit($) {
+	my ($isbn) = @_;
+
+	if (length($isbn)!=9) {
+		# ISBN-10 without check digit
+		return undef;
+	}
+
+	my $csum;
+	$csum+= 1* substr($isbn,0,1);
+	$csum+= 2* substr($isbn,1,1);
+	$csum+= 3* substr($isbn,2,1);
+	$csum+= 4* substr($isbn,3,1);
+	$csum+= 5* substr($isbn,4,1);
+	$csum+= 6* substr($isbn,5,1);
+	$csum+= 7* substr($isbn,6,1);
+	$csum+= 8* substr($isbn,7,1);
+	$csum+= 9* substr($isbn,8,1);
+	$csum %= 11;
+
+	if ($csum == 10) {
+		return 'X';
+	} else {
+		return $csum;
+	}
+}
+
+sub ISBN_checkcheckdigit($) {
+	my ($s) = @_;
+
+	if (length($s)!=10) {
+		return undef;
+	}
+
+	my $check = chop($s);
+	return ($check == ISBN_makecheckdigit($s));
+}
+
+sub validate_isbn($) {
+	my ($isbn) = @_;
+
+	if (length($isbn)==9) {
+		# Assume it is an old style 9 digit ISBN and prefix it with
+		# a zero character before falling through
+		$isbn='0'.$isbn;
+	}
+	if (length($isbn)==10 && ISBN_checkcheckdigit($isbn)) {
+		return $isbn;
+	}
+
+	if (length($isbn)==13 && EAN13_checkcheckdigit($isbn)) {
+		my $prefix = substr($isbn,0,3);
+		if ($prefix eq '978' || $prefix eq '979') {
+			# its bookland (978) or expansion (979)
+			return $isbn;
+
+#			# convert to 'old' ISBN format
+#			my $new = substr($isbn,3);
+#			chop($new);
+#			my $newcheck = ISBN_makecheckdigit($new);
+#			if (!defined $newcheck) {
+#				warn "error in isbn check digit generation\n";
+#				return;
+#			}
+#			return $new.$newcheck;
+
+		}
+		if ($prefix eq '977') {
+			# its an ISSN, assume that this might work
+			return $isbn;
+		}
+		warn "Not a BookLand EAN";
+		return;
+	}
+
+	warn "Invalid ISBN";
+	return;
+}
+
 # FIXME globals
 my $cmds = {};
 
@@ -731,9 +842,18 @@ sub do_one_cmdline($$) {
 
 	# ISBN's start with numbers
 	if ($_ =~ m/^[0-9]/) {
-		# TODO - split input at first non digit
-		# TODO - check the isbn check-digit
+
+		# Is this only the ISBN and nothing else?
+		# then try and validate it and beep if there is an error
+		if ($_ =~ m/^[0-9]+[xX]?$/ && !($_ = validate_isbn($_))) {
+			# TODO - should I remove the warns from
+			# validate_isbn and output the message here?
+			print '';
+			return;
+		}
+
 		print "$_\t";
+
 		my $root = isbn_get($ua,$option->{key},$_);
 		if ($root) {
 			process_one_bookdata($_,$root);
@@ -773,6 +893,9 @@ sub do_one_cmdline($$) {
 
 sub do_repl($) {
 	my ($ua) = @_;
+
+	# Turn on autoflush so we can see progressive output
+	$| = 1;
 
 	$term->ornaments(0);
 	my $attribs = $term->Attribs;
