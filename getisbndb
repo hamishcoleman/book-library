@@ -414,11 +414,13 @@ sub ISBN_checkcheckdigit($) {
 	}
 
 	my $check = chop($s);
-	return ($check == ISBN_makecheckdigit($s));
+	return ($check eq ISBN_makecheckdigit($s));
 }
 
 sub validate_isbn($) {
 	my ($isbn) = @_;
+
+	$isbn = uc $isbn;
 
 	if (length($isbn)==9) {
 		# Assume it is an old style 9 digit ISBN and prefix it with
