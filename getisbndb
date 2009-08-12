@@ -1061,6 +1061,8 @@ if ($option->{db}) {
 	db_load($option->{db});
 }
 
+binmode STDOUT, ":utf8";
+
 $ua = http_setup();
 
 if ($option->{xml}) {
