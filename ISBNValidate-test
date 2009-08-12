@@ -1,0 +1,13 @@
+#!/usr/bin/perl
+use warnings;
+use strict;
+
+use ISBNValidate;
+
+print "Validations:\n";
+while( $ARGV[0] ) {
+        my $isbn = is_ISBN($ARGV[0]);
+        print ("V: ",$ARGV[0],"\t",$isbn||'ERROR',"\n");
+        pop @ARGV;
+}
+
