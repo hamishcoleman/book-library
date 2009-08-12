@@ -145,12 +145,23 @@ sub isbn_xml2text1($) {
 	my $res;
 
 	my $author;
-	for my $i ($node->getElementsByTagName('AuthorsText')) {
-		if ($author) {
-			$author.=', ';
+	for my $j ($node->getElementsByTagName('Authors')) {
+		for my $i ($node->getElementsByTagName('Person')) {
+			if ($author) {
+				$author.=', ';
+			}
+			$author.=$i->textContent();
 		}
-		$author.=$i->textContent();
 	}
+	if (!$author) {
+		for my $i ($node->getElementsByTagName('AuthorsText')) {
+			if ($author) {
+				$author.=', ';
+			}
+			$author.=$i->textContent();
+		}
+	}
+
 	my $title;
 	for my $i ($node->getElementsByTagName('Title')) {
 		if ($title) {
@@ -159,7 +170,7 @@ sub isbn_xml2text1($) {
 		$title.=$i->textContent();
 	}
 
-	$res.=sprintf("%-14s %-21s %s\n",
+	$res.=sprintf("%-14s %-25s %s\n",
 		$node->getAttribute('isbn').';',
 		$author.';', $title
 	);
@@ -223,11 +234,21 @@ sub db_index_bookdata($) {
 	my ($node) = @_;
 
 	my $author;
-	for my $i ($node->getElementsByTagName('AuthorsText')) {
-		if ($author) {
-			$author.=', ';
+	for my $j ($node->getElementsByTagName('Authors')) {
+		for my $i ($node->getElementsByTagName('Person')) {
+			if ($author) {
+				$author.=', ';
+			}
+			$author.=$i->textContent();
 		}
-		$author.=$i->textContent();
+	}
+	if (!$author) {
+		for my $i ($node->getElementsByTagName('AuthorsText')) {
+			if ($author) {
+				$author.=', ';
+			}
+			$author.=$i->textContent();
+		}
 	}
 	push @{$db->{author}{$author}},$node;
 
@@ -729,6 +750,7 @@ sub do_remove($$) {
 		$node->unbindNode();
 	} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
 		$db->{_}{last_added}->unbindNode();
+		delete $db->{_}{last_added};
 	} else {
 		print "$isbn not found\n";
 		return
