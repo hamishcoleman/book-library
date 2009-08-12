@@ -248,6 +248,7 @@ sub tag_book($$) {
 	my $isbn = $node->getAttribute('isbn');
 	my $oldtag = $node->getAttribute('tag');
 	if ($oldtag) {
+		print "Removing old tag $oldtag from $isbn\n";
 		delete $db->{tag}{$oldtag}{$isbn};
 	}
 
@@ -802,6 +803,9 @@ register_help('.tag','
  This command also accepts "last" as the ISBN, in which case it will
  tag the most recently added entry.
 
+ NOTE: an entry can only have one tag - setting a new tag will remove
+ the original tag
+
 Eg:
  .tag chuck
  .tag shelf4 0330231669 058604356X
@@ -849,8 +853,9 @@ sub do_one_cmdline($$) {
 	if ($_ =~ m/^[0-9]/) {
 
 
-		# remove spaces
+		# remove spaces and other strange chars
 		s/ +//g;
+		s/-+//g;
 		
 		# try and validate it and beep if there is an error
 		if (!($_ = validate_isbn($_))) {
