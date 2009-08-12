@@ -1,0 +1,13 @@
+
+page login:
+	form with username, password, submit
+
+	authenticates against database
+	successfull authentication sends cookie and sets cookie in database
+	then renders page main
+
+	unsuccessful authentication clears cookie then renders page loginerror
+
+page main:
+	form :w
+
