@@ -222,8 +222,6 @@ sub addlog {
 sub db_index_bookdata($) {
 	my ($node) = @_;
 
-	$db->{book_id}{$node->getAttribute('book_id')} = $node;
-
 	my $author;
 	for my $i ($node->getElementsByTagName('AuthorsText')) {
 		if ($author) {
@@ -242,10 +240,6 @@ sub db_index_bookdata($) {
 
 sub db_index_remove($) {
 	my ($node) = @_;
-
-	my $book_id = $node->getAttribute('book_id');
-
-	delete $db->{book_id}{$book_id};
 
 	# FIXME - remove author index;
 
@@ -290,6 +284,11 @@ sub db_getElementByAttrib($$$$) {
 	}
 }
 
+# TODO -
+# getElementsByAttrib - returning either list or nodelist
+# get where attrib exists
+# get where attrib doesnt exist
+
 sub db_load($) {
 	my ($filename) = @_;
 
@@ -301,7 +300,6 @@ sub db_load($) {
 	# TODO - warn / create an empty document on fail
 	$db->{_}{isbndb} = $db->{_}{doc}->getDocumentElement();
 
-	$db->{book_id} = {};
 	$db->{author} = {};
 
 	for my $node ($db->{_}{doc}->getElementsByTagName('BookData')) {
