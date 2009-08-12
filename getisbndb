@@ -57,6 +57,7 @@ do_options($option,
 		"log=s",
 		"db=s",
 		"deftag=s",
+		"cmd=s",
 );
 
 #
@@ -1056,7 +1057,8 @@ if ($option->{xml}) {
 	}
 	print "G:",$db->{_}{KeyStats}{granted};
 	print "\n";
-
+} elsif ($option->{cmd}) {
+	do_one_cmdline($option->{cmd});
 } elsif ($option->{stdin}) {
 	do_repl($ua);
 } elsif ($option->{isbn}) {
