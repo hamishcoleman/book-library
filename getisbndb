@@ -293,16 +293,18 @@ sub tag_book($$) {
 }
 
 #
-# Searches the database for the first matching node
+# Searches the database for the last matching node
 #
 sub db_getElementByAttrib($$$$) {
 	my ($self,$tag,$key,$val) = @_;
 
+	my $ret;
 	for my $node ($self->getElementsByTagName($tag)) {
 		if ($node->getAttribute($key) eq $val) {
-			return $node;
+			$ret=$node;
 		}
 	}
+	return $ret;
 }
 
 # TODO -
