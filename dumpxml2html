@@ -14,6 +14,8 @@ use Data::Dumper;
 $Data::Dumper::Indent = 1;
 $Data::Dumper::Sortkeys = 1;
 
+binmode STDOUT, ":utf8";
+
 # FIXME - globals
 my $parser = XML::LibXML->new();
 sub isbn_xml($) {
@@ -38,11 +40,12 @@ sub isbn_xml($) {
 
 
 	for my $book ($isbndb->getElementsByTagName('BookData')) {
-		my $id = $book->getAttribute('book_id');
+		my $id = $book->getAttribute('isbn');
 		$db->{BookData}->{$id}={};
 		my $entry = $db->{BookData}->{$id};
 
-		$entry->{ISBN} = $book->getAttribute('isbn');
+		$entry->{book_id} = $book->getAttribute('book_id');
+		$entry->{ISBN} = $id;
 
 		$entry->{Title} = ($book->getElementsByTagName('Title'))[0]->textContent();
 		#$entry->{AuthorsText} = ($book->getElementsByTagName('AuthorsText'))[0]->textContent();
@@ -56,12 +59,29 @@ sub isbn_xml($) {
 			$entry->{Prices}->{$id}->{price} = $price->getAttribute('price');
 		}
 
+		my $author;
 		my $authors = ($book->getElementsByTagName('Authors'))[0];
+		my $i;
 		for my $person ($authors->getElementsByTagName('Person')) {
-			my $id = $person->getAttribute('person_id');
+			my $person_id = $person->getAttribute('person_id');
 
-			$entry->{Authors}->{$id} = $person->textContent();
+			if (!$person_id) {
+				$person_id = $i++;
+                        }
+
+			$entry->{Authors}->{$person_id} = $person->textContent();
+
+			if ($author) {
+				$author.=', ';
+			}
+			$author.=$person->textContent();
 		}
+		if (!$entry->{Authors}) {
+			$entry->{Authors}{Text} = ($book->getElementsByTagName('AuthorsText'))[0]->textContent();
+			$author.=$entry->{Authors}{Text};
+		}
+
+		$db->{Authors}{$author}{$id} = $entry;
 	}
 
 	return $db;
@@ -70,19 +90,22 @@ sub isbn_xml($) {
 sub emit_tr($) {
 	my ($db) = @_;
 	my @r;
-		
-	for my $book_id (keys %{$db->{BookData}}) {
-		my $book = $db->{BookData}->{$book_id};
-		push @r,'<tr>';
-		push @r,'<td>',$book->{ISBN},'</td>';
-		push @r,'<td>',$book->{Title},'</td>';
-		push @r,'<td>';
-		for my $person_id (keys %{$book->{Authors}}) {
-			push @r,$book->{Authors}->{$person_id},'<br/>';
+
+	for my $author (sort keys %{$db->{Authors}}) {
+		for my $book_id (keys %{$db->{Authors}{$author}}) {
+			my $book = $db->{BookData}->{$book_id};
+			push @r,'<tr>';
+			push @r,'<td>',$book->{ISBN},'</td>';
+			push @r,'<td>',$book->{Title},'</td>';
+			push @r,'<td>';
+			for my $person_id (keys %{$book->{Authors}}) {
+				push @r,$book->{Authors}->{$person_id},'<br/>';
+			}
+			push @r,'</td>';
+			push @r,'<td>',$book->{Summary},'</td>';
+			push @r,'</tr>';
+			push @r,"\n";
 		}
-		push @r,'</td>';
-		push @r,'<td>',$book->{Summary},'</td>';
-		push @r,'</tr>';
 	}
 	
 	return @r;
@@ -94,13 +117,15 @@ sub do_request($) {
 
 	my $db = isbn_xml($filename);
 
-	print $q->start_html( -title=>'XML Database Dump', );
+	print $q->start_html(
+		-title=>'XML Database Dump',
+	);
 
 	print "<table border='2' cellpadding='4' cellspacing='0' style='margin: 1em 1em 1em 0; background: #f9f9f9; border: 1px #aaa solid; border-collapse: collapse; font-size: 95%;'>";
-	print "<tr><th>ISBN<th>Title<th>Author<th>Summary</tr>";
+	print "<tr><th>ISBN<th>Title<th>Author<th>Summary</tr>\n";
 
 	print  emit_tr($db);
-	print "</table>";
+	print "</table>\n";
 
 	print $q->end_html();
 
