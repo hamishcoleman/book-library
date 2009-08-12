@@ -945,6 +945,7 @@ sub process_one_bookdata($$) {
 
 sub do_one_cmdline($$) {
 	my ($ua) = shift;
+	$_ = shift;
 	chomp;
 
 	# ISBN's start with numbers
