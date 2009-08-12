@@ -223,8 +223,6 @@ sub db_index_bookdata($) {
 	my ($node) = @_;
 
 	$db->{book_id}{$node->getAttribute('book_id')} = $node;
-	my $isbn = $node->getAttribute('isbn');
-	$db->{isbn}{$isbn} = $node;
 
 	my $author;
 	for my $i ($node->getElementsByTagName('AuthorsText')) {
@@ -237,6 +235,7 @@ sub db_index_bookdata($) {
 
 	my $tag = $node->getAttribute('tag');
 	if ($tag) {
+		my $isbn = $node->getAttribute('isbn');
 		$db->{tag}{$tag}{$isbn}=$node;
 	}
 }
@@ -245,15 +244,14 @@ sub db_index_remove($) {
 	my ($node) = @_;
 
 	my $book_id = $node->getAttribute('book_id');
-	my $isbn = $node->getAttribute('isbn');
 
 	delete $db->{book_id}{$book_id};
-	delete $db->{isbn}{$isbn};
 
 	# FIXME - remove author index;
 
 	my $tag = $node->getAttribute('tag');
 	if ($tag) {
+		my $isbn = $node->getAttribute('isbn');
 		delete $db->{tag}{$tag}{$isbn};
 	}
 }
@@ -279,6 +277,19 @@ sub tag_book($$) {
 	}
 }
 
+#
+# Searches the database for the first matching node
+#
+sub db_getElementByAttrib($$$$) {
+	my ($self,$tag,$key,$val) = @_;
+
+	for my $node ($self->getElementsByTagName($tag)) {
+		if ($node->getAttribute($key) eq $val) {
+			return $node;
+		}
+	}
+}
+
 sub db_load($) {
 	my ($filename) = @_;
 
@@ -290,7 +301,6 @@ sub db_load($) {
 	# TODO - warn / create an empty document on fail
 	$db->{_}{isbndb} = $db->{_}{doc}->getDocumentElement();
 
-	$db->{isbn} = {};
 	$db->{book_id} = {};
 	$db->{author} = {};
 
@@ -311,7 +321,7 @@ sub db_new_fake_isbn() {
 	my $i = $db->{_}{last_fake_isbn} || 100;
 
 	my $isbn = sprintf("Z%08iZ",$i);
-	while(defined($db->{isbn}{$isbn})) {
+	while(db_getElementByAttrib($db->{_}{isbndb},'BookData','isbn',$isbn)) {
 		$i++;
 		$isbn = sprintf("Z%08iZ",$i);
 	}
@@ -327,8 +337,14 @@ sub adddb {
 	my ($root) = @_;
 
 	for my $node ($root->getElementsByTagName('BookData')) {
+		# set a default tag if there is not currently one
 		if ($option->{deftag} && !$node->getAttribute('tag')) {
 			$node->setAttribute('tag',$option->{deftag});
+		}
+
+		my $isbn = $node->getAttribute('isbn');
+		if (db_getElementByAttrib($db->{_}{isbndb},'BookData','isbn',$isbn)) {
+			warn "$isbn is a duplicate";
 		}
 
 		$db->{_}{isbndb}->appendChild($node);
@@ -679,8 +695,9 @@ sub do_show($$) {
 	my @list = split /\W/,$str;
 
 	for my $isbn (@list) {
-		if ($db->{isbn}{$isbn}) {
-			print $db->{isbn}{$isbn}->toString(1),"\n";
+		my $node = db_getElementByAttrib($db->{_}{isbndb},'BookData','isbn',$isbn);
+		if ($node) {
+			print $node->toString(1),"\n";
 		} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
 			print $db->{_}{last_added}->toString(1),"\n";
 		} else {
@@ -709,13 +726,11 @@ Eg:
 sub do_remove($$) {
 	my ($cmd,$isbn) = @_;
 
-	if ($db->{isbn}{$isbn}) {
-		$db->{isbn}{$isbn}->unbindNode();
-		delete $db->{isbn}{$isbn};
-	} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
-		my $node = $db->{_}{last_added};
+	my $node = db_getElementByAttrib($db->{_}{isbndb},'BookData','isbn',$isbn);
+	if ($node) {
 		$node->unbindNode();
-		delete $db->{isbn}{$node->getAttribute('isbn')};
+	} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
+		$db->{_}{last_added}->unbindNode();
 	} else {
 		print "$isbn not found\n";
 		return
@@ -798,8 +813,9 @@ sub do_tag($$) {
 
 	print "Tagging books\n";
 	for my $i (@list) {
-		if ($db->{isbn}{$i}) {
-			tag_book($db->{isbn}{$i},$tag);
+		my $node = db_getElementByAttrib($db->{_}{isbndb},'BookData','isbn',$i);
+		if ($node) {
+			tag_book($node,$tag);
 		} elsif ($i eq 'last' && $db->{_}{last_added}) {
 			tag_book($db->{_}{last_added},$tag);
 		} else {
@@ -851,6 +867,7 @@ sub do_edit_helper($) {
 	my ($node) = @_;
 
 	my ($fh, $filename) = tempfile();
+	binmode $fh, ":utf8";
 	my $string = $node->toString(1);
 	$fh->write($string);
 
@@ -893,8 +910,9 @@ sub do_edit($$) {
 	my @list = split /\W/,$str;
 
 	for my $isbn (@list) {
-		if ($db->{isbn}{$isbn}) {
-			do_edit_helper($db->{isbn}{$isbn});
+		my $node = db_getElementByAttrib($db->{_}{isbndb},'BookData','isbn',$isbn);
+		if ($node) {
+			do_edit_helper($node);
 		} elsif ($isbn eq 'last' && $db->{_}{last_added}) {
 			do_edit_helper($db->{_}{last_added});
 		} else {
