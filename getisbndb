@@ -949,6 +949,8 @@ sub do_search($$) {
 
 	# FIXME - uses global $ua var
 
+	# TODO - get multiple pages
+
 	my $url = "http://isbndb.com/api/books.xml?access_key=$option->{key}&results=details,authors,keystats&index1=combined&value1=$text";
 
 	my $req = HTTP::Request->new(GET => $url);
@@ -965,6 +967,145 @@ sub do_search($$) {
 	print isbn_xml2text($xml);
 }
 register_cmd('search',\&do_search,'Perform a title and author text search');
+
+sub do_librarything_export($$) {
+	my ($cmd,$text) = @_;
+
+	use Class::CSV;
+
+	my $csv = Class::CSV->new(
+		fields => [qw/title author date isbn publication tags rating review entrydate/],
+	);
+
+	$csv->add_line([
+		"'TITLE'", "'AUTHOR (last, first)'", "'DATE'", "'ISBN'",
+		"'PUBLICATION INFO'", "'TAGS'", "'RATING'", "'REVIEW'",
+		"'ENTRY DATE'"
+	]);
+
+
+	for my $node ($db->{_}{isbndb}->getElementsByTagName('BookData')) {
+		my %l;
+
+		my $title;
+		for my $i ($node->getElementsByTagName('Title')) {
+			if ($title) {
+				$title.=', ';
+			}
+			$title.=$i->textContent();
+		}
+		$l{title}=$title;
+
+		my $author;
+		for my $j ($node->getElementsByTagName('Authors')) {
+			for my $i ($node->getElementsByTagName('Person')) {
+				if ($author) {
+					$author.='; ';
+				}
+				$author.=$i->textContent();
+			}
+		}
+		if (!$author) {
+			for my $i ($node->getElementsByTagName('AuthorsText')) {
+				if ($author) {
+					$author.=', ';
+				}
+				$author.=$i->textContent();
+			}
+		}
+		$l{author}=$author;
+
+		$l{isbn} = $node->getAttribute('isbn');
+
+		my $publication;
+		for my $i ($node->getElementsByTagName('PublisherText')) {
+			if ($publication) {
+				$publication.=', ';
+			}
+			$publication.=$i->textContent();
+		}
+		for my $i ($node->getElementsByTagName('Details')) {
+			my $edition = $i->getAttribute('edition_info');
+			if ($edition) {
+				if ($publication) {
+					$publication.=', ';
+				}
+				$publication.=$edition;
+				if ($edition =~ m/; (\d{4}(-\d\d-\d\d)?)/) {
+					$l{date} = $1;
+				}
+			}
+
+			my $phys = $i->getAttribute('physical_description_text');
+			if ($phys) {
+				if ($publication) {
+					$publication.=', ';
+				}
+				$publication.=$phys;
+			}
+		}
+		$l{publication} = $publication;
+
+		$l{tags} = $node->getAttribute('tag');
+#		$l{rating} =
+#		$l{review} =
+#		$l{entrydate} =
+
+		$csv->add_line(\%l);
+#'TITLE',"'AUTHOR (last, first)'",'DATE','ISBN',"'PUBLICATION INFO'",'TAGS','RATING','REVIEW',"'ENTRY DATE'"
+#"A Gentle Madness: Bibliophiles, Bibliomanes, and the Eternal Passion for Books","Basbanes, Nicholas A.",1999,0805061762,"Holt Paperbacks (1999), Paperback, 668 pages",,0,,"2008-06-17 12:03:21"
+
+	}
+
+	$csv->print();
+}
+register_cmd('librarything_export',\&do_librarything_export,'Export the database in librarything csv format');
+
+sub do_librarything_import($$) {
+	my ($cmd,$filename) = @_;
+
+	if (!$filename) {
+		print "Need to specify a filename\n";
+		return;
+	}
+
+	use Class::CSV;
+
+	my $csv = Class::CSV->parse(
+		filename => $filename,
+		fields   => [qw/title author date isbn publication tags rating review entrydate x y z/],
+	);
+
+	my @lines = @{$csv->lines()};
+	# first line should be the titles
+	pop @lines;
+
+	my $root = XML::LibXML::Element->new('ISBNdb');
+	for my $line (@lines) {
+		my $node = XML::LibXML::Element->new('BookData');
+		$root->appendChild($node);
+		$node->setAttribute('book_id','isbn'.$line->isbn());
+
+		$node->appendTextChild('Title',$line->title());
+		$node->appendTextChild('AuthorsText',$line->author());
+		$node->appendTextChild('Authors','');	# FIXME - construct
+		# date
+		$node->setAttribute('isbn',$line->isbn());
+		# publication
+		$node->appendTextChild('Details','');	# FIXME - contstruct
+		$node->setAttribute('tag',$line->{tags});
+		# rating
+		# review
+		# entrydate
+
+		$node->appendTextChild('Summary','');
+		$node->appendTextChild('Prices','');
+
+	}
+	adddb($root);
+}
+register_cmd('librarything_import',\&do_librarything_import,'Import the database from librarything csv format');
+
 
 sub process_one_bookdata($$) {
 	my ($search,$root) = @_;
