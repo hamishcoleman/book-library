@@ -971,6 +971,7 @@ register_cmd('search',\&do_search,'Perform a title and author text search');
 sub do_librarything_export($$) {
 	my ($cmd,$text) = @_;
 
+	# TODO - use Text::CSV_XS as in the import routine
 	use Class::CSV;
 
 	my $csv = Class::CSV->new(
@@ -1068,43 +1069,56 @@ sub do_librarything_import($$) {
 		return;
 	}
 
-	use Class::CSV;
+	use Text::CSV_XS;
 
-	my $csv = Class::CSV->parse(
-		filename => $filename,
-		fields   => [qw/title authorfl author date lcc dcc isbn publication rating review entrydate copies subjects tags/],
-	);
+	my $csv = Text::CSV_XS->new ({ binary => 1, eol => $/ });
+	open my $io, "<", $filename or die "$filename: $!";
+	binmode $io, ":utf8";
 
+	$csv->column_names([qw/title authorfl author date lcc dcc isbn publication rating review entrydate copies subjects tags/]);
 
 #'TITLE',"'AUTHOR (first, last)'","'AUTHOR (last, first)'",'DATE','LCC','DDC','ISBN',"'PUBLICATION INFO'",'RATING','REVIEW',"'ENTRY DATE'",'COPIES','SUBJECTS','TAGS'
 
-	my @lines = @{$csv->lines()};
 	# first line should be the titles
-	pop @lines;
+	$csv->getline_hr($io);
 
-	my $root = XML::LibXML::Element->new('ISBNdb');
-	for my $line (@lines) {
+	while (my $row = $csv->getline_hr($io)) {
+		my $root = XML::LibXML::Element->new('ISBNdb');
 		my $node = XML::LibXML::Element->new('BookData');
-		$root->appendChild($node);
-		$node->setAttribute('book_id','isbn'.$line->isbn());
 
-		$node->appendTextChild('Title',$line->title());
-		$node->appendTextChild('AuthorsText',$line->author());
+		my $isbn = $row->{isbn};
+
+		# librarything wraps their isbns with square brackets
+		$isbn =~ s/^\[//;
+		$isbn =~ s/\]$//;
+
+		# no isbn recorded..
+		if (!$isbn) {
+			$isbn = db_new_fake_isbn();
+		}
+
+		$root->appendChild($node);
+		$node->setAttribute('book_id','isbn'.$isbn);
+
+		$node->appendTextChild('Title',$row->{title});
+		$node->appendTextChild('AuthorsText',$row->{author});
 		$node->appendTextChild('Authors','');	# FIXME - construct
 		# date
-		$node->setAttribute('isbn',$line->isbn());
+		# lcc
+		# dcc
+		$node->setAttribute('isbn',$isbn);
 		# publication
 		$node->appendTextChild('Details','');	# FIXME - contstruct
-		$node->setAttribute('tag',$line->{tags});
 		# rating
 		# review
 		# entrydate
+		# copies
+		$node->appendTextChild('Summary',$row->{subjects});	# FIXME UTF-8 annoys this
+		$node->setAttribute('tag',$row->{tags});
 
-		$node->appendTextChild('Summary','');
 		$node->appendTextChild('Prices','');
-
+		adddb($root);
 	}
-	adddb($root);
 }
 register_cmd('librarything_import',\&do_librarything_import,'Import the database from librarything csv format');
 
