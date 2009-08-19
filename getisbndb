@@ -1054,7 +1054,6 @@ sub do_librarything_export($$) {
 		$csv->add_line(\%l);
 #'TITLE',"'AUTHOR (last, first)'",'DATE','ISBN',"'PUBLICATION INFO'",'TAGS','RATING','REVIEW',"'ENTRY DATE'"
 #"A Gentle Madness: Bibliophiles, Bibliomanes, and the Eternal Passion for Books","Basbanes, Nicholas A.",1999,0805061762,"Holt Paperbacks (1999), Paperback, 668 pages",,0,,"2008-06-17 12:03:21"
-
 	}
 
 	$csv->print();
@@ -1073,8 +1072,11 @@ sub do_librarything_import($$) {
 
 	my $csv = Class::CSV->parse(
 		filename => $filename,
-		fields   => [qw/title author date isbn publication tags rating review entrydate x y z/],
+		fields   => [qw/title authorfl author date lcc dcc isbn publication rating review entrydate copies subjects tags/],
 	);
+
+
+#'TITLE',"'AUTHOR (first, last)'","'AUTHOR (last, first)'",'DATE','LCC','DDC','ISBN',"'PUBLICATION INFO'",'RATING','REVIEW',"'ENTRY DATE'",'COPIES','SUBJECTS','TAGS'
 
 	my @lines = @{$csv->lines()};
 	# first line should be the titles
