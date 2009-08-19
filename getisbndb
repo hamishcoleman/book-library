@@ -1071,18 +1071,22 @@ sub do_librarything_import($$) {
 
 	use Text::CSV_XS;
 
-	my $csv = Text::CSV_XS->new ({ binary => 1, eol => $/ });
-	open my $io, "<", $filename or die "$filename: $!";
-	binmode $io, ":utf8";
+	my $fh = new FileHandle $filename,"r";
+	if (!defined $fh) {
+		warn "could not open $filename $!\n";
+		return;
+	}
+	binmode $fh, ":utf8";
 
+	my $csv = Text::CSV_XS->new ({ binary => 1, eol => $/ });
 	$csv->column_names([qw/title authorfl author date lcc dcc isbn publication rating review entrydate copies subjects tags/]);
 
 #'TITLE',"'AUTHOR (first, last)'","'AUTHOR (last, first)'",'DATE','LCC','DDC','ISBN',"'PUBLICATION INFO'",'RATING','REVIEW',"'ENTRY DATE'",'COPIES','SUBJECTS','TAGS'
 
 	# first line should be the titles
-	$csv->getline_hr($io);
+	$csv->getline_hr($fh);
 
-	while (my $row = $csv->getline_hr($io)) {
+	while (my $row = $csv->getline_hr($fh)) {
 		my $root = XML::LibXML::Element->new('ISBNdb');
 		my $node = XML::LibXML::Element->new('BookData');
 
