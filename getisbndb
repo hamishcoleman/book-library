@@ -1136,6 +1136,9 @@ sub do_one_cmdline($$) {
 		# remove spaces and other strange chars
 		s/ +//g;
 		s/-+//g;
+
+		# for keypad entry, turn a "*" into a "X"
+		s/\*$/X/;
 		
 		# try and validate it and beep if there is an error
 		if (!($_ = validate_isbn($_))) {
