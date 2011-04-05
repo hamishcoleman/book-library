@@ -5,6 +5,11 @@ use strict;
 # Given an ISBN, look it up
 #
 
+#
+# libxml-libxml-perl libterm-readline-perl-perl libwww-perl libtext-csv-perl libtext-csv-xs-perl
+# libclass-csv-perl
+#
+
 our $VERSION=1;
 
 use Getopt::Long 2.33 qw(:config gnu_getopt);
