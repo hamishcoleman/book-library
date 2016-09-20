@@ -8,11 +8,12 @@ use strict;
 #
 # libxml-libxml-perl libterm-readline-perl-perl libwww-perl libtext-csv-perl libtext-csv-xs-perl
 # libclass-csv-perl
+# libgetopt-long-descriptive-perl
 #
 
 our $VERSION=1;
 
-use Getopt::Long 2.33 qw(:config gnu_getopt);
+use Getopt::Long::Descriptive;
 use Pod::Usage;
 
 use FileHandle;
@@ -32,38 +33,34 @@ my $parser = XML::LibXML->new();
 my $ua; # for user agent
 my $db={};
 
-###############################################################################
-##
-## Standard options processor
-sub do_options(%@) {
-	my $option = shift;
-	GetOptions($option,@_) or pod2usage(2);
-	pod2usage(-exitstatus => 0, -verbose => 2) if $option->{man};
-
-	if ($option->{quiet}) {
-		delete $option->{verbose};
-	}
-}
-
-###############################################################################
-
-my $option={};          # set option defaults here
-$option->{verbose}=0;
-$option->{key}='CHANGEME';
-# remember to update the SYNOPSIS and OPTIONS when this changes
-do_options($option,
-		"man",
-		"verbose|v+",
-		"quiet|q",
-		"key=s",
-		"isbn=s",
-		"xml=s",
-		"stdin",
-		"log=s",
-		"db=s",
-		"deftag=s",
-		"cmd=s",
+my ($option,$usage) = describe_options('usage: %c %o',
+	[ 'man'        => 'show full man page' ],
+	[ 'verbose|v+' => 'increase verbosity' ],
+	[ 'quiet|q'    => 'make quiet' ],
+	[ 'key=s'      => '[string] isbndb key', {default => 'CHANGEME'} ],
+	[ 'log=s'      => '[file] log to this file (depricated)' ],
+	[ 'db=s'       => '[file] XML database file' ],
+	[ 'deftag=s'   => '[string] default tag for new books' ],
+	[ 'mode'       => hidden => { one_of => [
+		[ 'xml=s'      => '[string] Load this XML data' ],
+		[ 'cmd=s'      => '[string] Do one command' ],
+		[ 'stdin'      => 'Interactive command mode' ],
+		[ 'isbn=s'     => '[isbn] Lookup book data from isbn' ],
+	] } ],
+	{ getopt_conf => [ qw(gnu_getopt) ] },
 );
+if ($option->{help}) {
+	print $usage;
+	exit 0;
+}
+if ($option->{man}) {
+	pod2usage(-exitstatus => 0, -verbose => 2);
+}
+if ($option->{quiet}) {
+	delete $option->{verbose};
+};
+
+
 
 #
 # Generic http dumping routine
