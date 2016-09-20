@@ -75,7 +75,7 @@ sub dump_res($$) {
 		warn "!is_success";
 	}
 
-	if ($option->{verbose}>1) {
+	if (defined $option->{verbose} && $option->{verbose}>1) {
 		print "DUMP RES: $desc\n";
 		print Dumper($res);
 	}
